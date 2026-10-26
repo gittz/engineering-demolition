@@ -1,6 +1,7 @@
 // AI 拆解核心逻辑：Node 本地服务器（server.js）与 Cloudflare Worker（worker/index.js）共用。
 // 只依赖标准 fetch，env 为环境变量对象（Node 传 process.env，Worker 传 env）。
-import { SYSTEM_PROMPT, TEARDOWN_SCHEMA, buildUserText } from './prompt.js';
+import { SYSTEM_PROMPT, OPENAI_SYSTEM_PROMPT, TEARDOWN_SCHEMA, buildUserText } from './prompt.js';
+export { promptPayload } from './prompt.js';
 
 export function httpError(status, message) {
   const e = new Error(message);
@@ -89,7 +90,7 @@ async function callOpenAI(c, hint, dataUrl) {
     messages: [
       {
         role: 'system',
-        content: `${SYSTEM_PROMPT.replace('只通过 submit_teardown 输出结果，不要输出其它内容。', '')}\n\n只输出一个 JSON 对象，不要任何解释或代码块标记。JSON 必须符合以下 JSON Schema：\n${JSON.stringify(TEARDOWN_SCHEMA)}`,
+        content: OPENAI_SYSTEM_PROMPT,
       },
       {
         role: 'user',

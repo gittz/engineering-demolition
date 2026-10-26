@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>拆解 LAB · 模型设置</title>
+  <link rel="stylesheet" href="options.css" />
+</head>
+<body>
+  <main>
+    <header>
+      <img src="icons/48.png" alt="" width="40" height="40" />
+      <div>
+        <h1>拆解 LAB · 自带模型</h1>
+        <p>在拆解 LAB 网站上传照片时，使用你自己的大模型和密钥。</p>
+      </div>
+    </header>
+
+    <section class="banner" id="allowBanner" hidden>
+      <div>
+        <b>网站请求使用你的模型</b>
+        <span id="allowOrigin"></span>
+      </div>
+      <div class="row">
+        <button class="btn ghost" id="denyBtn">忽略</button>
+        <button class="btn primary" id="allowBtn">允许</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>模型配置</h2>
+      <label class="field">
+        <span>服务商预设</span>
+        <select id="preset"></select>
+      </label>
+      <div class="field">
+        <span>接口格式</span>
+        <div class="seg">
+          <label><input type="radio" name="provider" value="openai" /> OpenAI 兼容</label>
+          <label><input type="radio" name="provider" value="anthropic" /> Anthropic</label>
+        </div>
+      </div>
+      <label class="field">
+        <span>接口地址 Base URL</span>
+        <input id="baseUrl" placeholder="https://api.deepseek.com" spellcheck="false" />
+      </label>
+      <label class="field">
+        <span>API Key</span>
+        <div class="row">
+          <input id="apiKey" type="password" placeholder="sk-..." autocomplete="off" spellcheck="false" />
+          <button class="btn ghost" id="toggleKey" type="button">显示</button>
+        </div>
+      </label>
+      <label class="field">
+        <span>模型名 <small>必须是支持图片输入的视觉模型</small></span>
+        <input id="model" placeholder="deepseek-v4-flash-vision-exp" spellcheck="false" />
+      </label>
+      <div class="grid2">
+        <label class="field">
+          <span>最大输出 tokens</span>
+          <input id="maxTokens" type="number" min="1000" step="1000" />
+        </label>
+        <label class="field check">
+          <input id="jsonMode" type="checkbox" />
+          <span>JSON 模式（response_format）<small>服务商不支持时请关闭</small></span>
+        </label>
+      </div>
+      <div class="actions">
+        <span class="msg" id="msg"></span>
+        <button class="btn ghost" id="testBtn">测试连接</button>
+        <button class="btn primary" id="saveBtn">保存</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>已允许的网站</h2>
+      <p class="note">只有这里列出的网站（以及本机 localhost）可以通过插件调用你的模型。</p>
+      <ul id="sites"></ul>
+    </section>
+
+    <p class="note privacy">密钥保存在本浏览器的插件存储中（chrome.storage.local），不会同步到其它设备，也不会发送给拆解 LAB 网站；照片由插件直接发送到你配置的模型服务商。</p>
+  </main>
+  <script type="module" src="options.js"></script>
+</body>
+</html>

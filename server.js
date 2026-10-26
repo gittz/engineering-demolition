@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { exec } from 'node:child_process';
-import { analyze, aiInfo, checkAccess, httpError } from './server/ai.js';
+import { analyze, aiInfo, checkAccess, httpError, promptPayload } from './server/ai.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -38,6 +38,7 @@ const MIME = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.ico': 'image/x-icon',
+  '.zip': 'application/zip',
 };
 
 function send(res, status, body, type = 'application/json; charset=utf-8') {
@@ -74,6 +75,7 @@ const server = http.createServer(async (req, res) => {
   try {
     const { pathname } = new URL(req.url, 'http://x');
     if (pathname === '/api/config' && req.method === 'GET') return send(res, 200, aiInfo(env));
+    if (pathname === '/api/prompt' && req.method === 'GET') return send(res, 200, promptPayload());
     if (pathname === '/api/analyze' && req.method === 'POST') {
       checkAccess(req.headers['x-access-code'], env);
       const body = JSON.parse((await readBody(req)) || '{}');

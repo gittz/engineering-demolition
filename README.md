@@ -63,7 +63,39 @@ Worker → **设置** → **域和路由** → **添加** → 自定义域。`wo
 
 ---
 
-## 二、本地运行
+## 二、浏览器插件：让用户用自己的模型
+
+网站默认用服务器上配置的密钥（花你的额度）。用户安装 `extension/` 里的 Chrome 插件后，可以在插件里填**他自己的**模型和密钥；再访问你的网站时，上传照片会由插件直接调用他的模型，不经过你的服务器，也不花你的额度。
+
+```
+网页 ──postMessage──► 插件内容脚本 ──► 插件后台 ──直接调用──► 用户自己的模型（DeepSeek / 通义 / 智谱 / 豆包 / OpenAI / Claude）
+  ▲                       │ 从网站读取同一份提示词（/api/prompt）
+  └──── 零件 JSON（流式进度）◄─┘
+```
+
+- **密钥安全**：密钥只存在用户浏览器的插件存储里（`chrome.storage.local`），不同步、不发给网站。
+- **防滥用**：除 localhost 外，网站第一次调用时，插件会打开设置页请用户点「允许」，陌生网站无法偷偷消耗用户额度。
+- **两种来源可切换**：上传对话框里可以选「我的模型（浏览器插件）」或「网站提供的模型」，没装插件时自动用网站模型。
+- **提示词同源**：插件从网站 `/api/prompt` 读取提示词。修改 `server/prompt.js` 并推送后，插件用户自动用上新提示词，插件不用更新。
+
+### 用户如何安装（开发者模式）
+
+网站上传对话框里有「安装插件，用自己的模型」入口，会提供 `/downloads/teardown-extension.zip` 的下载和安装步骤：
+
+1. 下载并解压插件压缩包。
+2. Chrome / Edge 打开 `chrome://extensions`，打开「开发者模式」，点「加载已解压的扩展程序」，选择解压出的文件夹。
+3. 点击工具栏里的插件图标，选服务商预设，填 API Key，点「测试连接」后保存。
+4. 回到网站刷新即可。
+
+### 修改插件后
+
+- 改完 `extension/` 后运行 `npm run pack:ext`，重新生成 `public/downloads/teardown-extension.zip`，再一起提交推送。
+- **自定义域名**：插件默认只在 `*.workers.dev` 和 localhost 上生效。如果网站绑定了自己的域名，要在 `extension/manifest.json` 的 `content_scripts.matches` 里加一行，比如 `"https://chaijie.example.com/*"`，然后重新打包。
+- **上架 Chrome 应用商店**（可选）：把 `extension/` 打成 zip，到 [Chrome 开发者控制台](https://chrome.google.com/webstore/devconsole) 提交（一次性注册费 5 美元）。上架后用户可以一键安装，不用开开发者模式。
+
+---
+
+## 三、本地运行
 
 **最简单（零依赖）：** 安装 Node.js 18+，复制 `.env.example` 为 `.env` 并填入密钥，然后 Windows 双击 `start.bat`，或运行 `node server.js`，打开 http://localhost:5173 。
 
@@ -108,6 +140,8 @@ worker/index.js        Worker 入口（/api/*，其余请求交给静态资源�
 server/ai.js           AI 调用核心（Worker 与本地共用）
 server/prompt.js       AI 提示词与 JSON Schema —— 想让 AI 拆得更细，改这里
 server.js              本地 Node 服务器
+extension/             Chrome 插件（用户自带模型）
+scripts/pack-extension.mjs  打包插件 → public/downloads/
 public/                网页（静态资源）
   js/app.js            三维场景、交互、上传流程
   js/geometry.js       形状 → Three.js 几何体 / 材质

@@ -1,5 +1,5 @@
 // Cloudflare Worker 入口：/api/* 由这里处理，其它请求交给静态资源（public/）。
-import { analyze, aiInfo, checkAccess } from '../server/ai.js';
+import { analyze, aiInfo, checkAccess, promptPayload } from '../server/ai.js';
 
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), {
@@ -55,6 +55,7 @@ export default {
   async fetch(request, env, ctx) {
     const { pathname } = new URL(request.url);
     if (pathname === '/api/config') return json(aiInfo(env));
+    if (pathname === '/api/prompt') return json(promptPayload());
     if (pathname === '/api/analyze') return handleAnalyze(request, env, ctx);
     if (pathname.startsWith('/api/')) return json({ error: 'Not found' }, 404);
     return env.ASSETS.fetch(request);

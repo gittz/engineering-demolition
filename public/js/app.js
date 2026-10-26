@@ -577,7 +577,7 @@ function renderRight() {
   const n = state.entries.length;
   const sz = o.overall_size_mm.some((x) => x > 0) ? o.overall_size_mm : [state.sizeMM.x, state.sizeMM.y, state.sizeMM.z];
   const meta = state.model.meta;
-  const source = state.item?.sample ? '内置示例' : state.item?.imported ? '导入文件' : `AI 推断${meta?.model ? ` · ${esc(meta.model)}` : ''}`;
+  const source = state.item?.sample ? '内置示例' : state.item?.imported ? '导入文件' : `AI 推断${meta?.model ? ` · ${esc(meta.model)}` : ''}${meta?.via === 'extension' ? '（我的模型）' : ''}`;
   rp.innerHTML = `
     <div class="rp-head"><span>模型概览</span></div>
     <div class="rp-icon">${CUBE}</div>
@@ -759,18 +759,122 @@ async function takeFile(file) {
     $('previewImg').src = pending.photo;
     $('previewImg').hidden = false;
     $('dropEmpty').hidden = true;
-    $('analyzeBtn').disabled = !state.aiEnabled;
-    $('codeField').hidden = !state.needsCode;
-    if (!state.aiEnabled) showUploadError('服务器还没有配置 AI 密钥：线上请在 Cloudflare 控制台「设置 → 变量和机密」中添加 ANTHROPIC_API_KEY；本地请写入 .env。详见 README。');
+    refreshUploadUI();
   } catch (err) { showUploadError(err.message); }
 }
 function showUploadError(msg) { $('uploadError').textContent = msg; $('uploadError').hidden = false; }
 
+// ---------------- 模型来源：浏览器插件（用户自己的模型）或网站服务器 ----------------
+const ext = { installed: false, configured: false, allowed: false, model: '', label: '' };
+const extPending = new Map();
+let extSeq = 0;
+const SRC_KEY = 'teardown.source.v1';
+
+function extSend(msg) { window.postMessage({ source: 'teardown-page', ...msg }, location.origin); }
+window.addEventListener('message', (ev) => {
+  if (ev.source !== window || ev.origin !== location.origin) return;
+  const m = ev.data;
+  if (!m || m.source !== 'teardown-ext') return;
+  if (m.type === 'ready' || m.type === 'status') {
+    Object.assign(ext, { installed: true, configured: Boolean(m.configured), allowed: Boolean(m.allowed), model: m.model || '', label: m.label || '' });
+    updateStatus();
+    refreshUploadUI();
+    return;
+  }
+  extPending.get(m.id)?.(m);
+});
+const pingExt = () => extSend({ type: 'status', id: 0 });
+window.addEventListener('focus', pingExt);
+
+function analyzeViaExt(job, hint, onProgress) {
+  return new Promise((resolve, reject) => {
+    const id = ++extSeq;
+    extPending.set(id, (m) => {
+      if (m.type === 'progress') return onProgress(m.chars);
+      extPending.delete(id);
+      if (m.type === 'result') resolve(m.data);
+      else {
+        const e = new Error(m.message || '插件出错');
+        e.code = m.code;
+        reject(e);
+      }
+    });
+    extSend({ type: 'analyze', id, image: job.image, hint });
+  });
+}
+
+async function analyzeViaServer(job, hint, code) {
+  const res = await fetch('/api/analyze', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-access-code': code },
+    body: JSON.stringify({ image: job.image, hint }),
+  });
+  // 线上（Cloudflare Worker）会先返回若干保活空格，再返回 JSON；出错时为 {"error": "..."}
+  const text = await res.text();
+  let json;
+  try { json = JSON.parse(text); } catch { throw new Error(`服务器返回异常 (${res.status})`); }
+  if (!res.ok || json.error) {
+    if (res.status === 401 || json.status === 401) store.set(CODE_KEY, '');
+    throw new Error(json.error || res.statusText);
+  }
+  return json;
+}
+
+function currentSource() {
+  const picked = document.querySelector('input[name=aiSource]:checked')?.value;
+  if (picked === 'ext' && ext.configured) return 'ext';
+  if (picked === 'server' && state.aiEnabled) return 'server';
+  if (ext.configured) return 'ext';
+  if (state.aiEnabled) return 'server';
+  return null;
+}
+
+function refreshUploadUI() {
+  const pref = store.get(SRC_KEY, null);
+  const extOk = ext.configured;
+  const srvOk = state.aiEnabled;
+  const rExt = document.querySelector('input[name=aiSource][value=ext]');
+  const rSrv = document.querySelector('input[name=aiSource][value=server]');
+  rExt.disabled = !extOk;
+  rSrv.disabled = !srvOk;
+  $('srcExt').classList.toggle('disabled', !extOk);
+  $('srcSrv').classList.toggle('disabled', !srvOk);
+  if (!rExt.checked && !rSrv.checked) {
+    if (pref === 'server' && srvOk) rSrv.checked = true;
+    else if (extOk) rExt.checked = true;
+    else if (srvOk) rSrv.checked = true;
+  }
+  if (rExt.checked && !extOk && srvOk) rSrv.checked = true;
+  if (rSrv.checked && !srvOk && extOk) rExt.checked = true;
+
+  $('srcExtInfo').textContent = !ext.installed ? '未安装插件' : !extOk ? '插件已安装，但还没有配置模型'
+    : `${ext.label ? `${ext.label} · ` : ''}${ext.model}${ext.allowed ? '' : ' · 首次使用需在插件中允许本网站'}`;
+  $('srcSrvInfo').textContent = srvOk ? `${state.serverModel}${state.needsCode ? ' · 需要访问码' : ''}` : '网站未配置模型';
+  $('extBtn').textContent = !ext.installed ? '安装插件，用自己的模型' : '打开插件设置';
+  $('srcHint').textContent = !ext.installed ? '' : '密钥只保存在你的浏览器里';
+
+  const src = currentSource();
+  $('codeField').hidden = !(src === 'server' && state.needsCode);
+  if (src === 'server' && state.needsCode && !$('codeInput').value) $('codeInput').value = store.get(CODE_KEY, '');
+  $('analyzeBtn').disabled = !pending || !src;
+}
+
+document.querySelectorAll('input[name=aiSource]').forEach((r) => r.addEventListener('change', () => {
+  store.set(SRC_KEY, r.value);
+  refreshUploadUI();
+}));
+$('extBtn').addEventListener('click', () => {
+  if (ext.installed) extSend({ type: 'openOptions' });
+  else $('extDlg').showModal();
+});
+
 $('openUpload').addEventListener('click', () => {
   $('uploadError').hidden = true;
-  $('codeField').hidden = !state.needsCode;
-  if (state.needsCode && !$('codeInput').value) $('codeInput').value = store.get(CODE_KEY, '');
-  if (!state.aiEnabled) showUploadError('提示：服务器尚未配置 AI 密钥，可以先浏览内置示例。配置方法见 README。');
+  pingExt();
+  refreshUploadUI();
+  if (!ext.configured && !state.aiEnabled) {
+    showUploadError('当前没有可用的模型：安装浏览器插件并配置你自己的模型，或由站点管理员在服务器配置密钥。');
+  }
   uploadDlg.showModal();
 });
 $('fileInput').addEventListener('change', (ev) => takeFile(ev.target.files[0]));
@@ -789,28 +893,30 @@ $('analyzeBtn').addEventListener('click', async () => {
   const job = pending;
   const hint = $('hintInput').value;
   const code = $('codeInput').value.trim();
-  if (state.needsCode && !code) { showUploadError('请输入访问码'); return; }
-  if (state.needsCode) store.set(CODE_KEY, code);
+  const src = currentSource();
+  if (!src) { showUploadError('没有可用的模型'); return; }
+  if (src === 'server' && state.needsCode && !code) { showUploadError('请输入访问码'); return; }
+  if (src === 'server' && state.needsCode) store.set(CODE_KEY, code);
+  if (src === 'ext' && !ext.allowed) {
+    extSend({ type: 'openOptions', allow: true });
+    showUploadError('已打开插件设置页：请点击「允许」本网站使用你的模型，然后回到这里再点一次「开始 AI 拆解」。');
+    return;
+  }
   uploadDlg.close();
   $('loadingImg').src = job.photo;
   $('loading').hidden = false;
   const t0 = Date.now();
-  const timer = setInterval(() => { $('loadingText').textContent = `已用时 ${Math.round((Date.now() - t0) / 1000)} 秒 · 通常需要 30–120 秒`; }, 1000);
-  $('loadingText').textContent = '通常需要 30–120 秒';
+  let chars = 0;
+  const who = src === 'ext' ? `我的模型 · ${ext.model}` : '网站模型';
+  const tickText = () => {
+    $('loadingText').textContent = `${who} · 已用时 ${Math.round((Date.now() - t0) / 1000)} 秒${chars ? ` · 已生成 ${chars.toLocaleString()} 字` : ' · 通常需要 30–120 秒'}`;
+  };
+  const timer = setInterval(tickText, 1000);
+  tickText();
   try {
-    const res = await fetch('/api/analyze', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-access-code': code },
-      body: JSON.stringify({ image: job.image, hint }),
-    });
-    // 线上（Cloudflare Worker）会先返回若干保活空格，再返回 JSON；出错时为 {"error": "..."}
-    const text = await res.text();
-    let json;
-    try { json = JSON.parse(text); } catch { throw new Error(`服务器返回异常 (${res.status})`); }
-    if (!res.ok || json.error) {
-      if (res.status === 401 || json.status === 401) store.set(CODE_KEY, '');
-      throw new Error(json.error || res.statusText);
-    }
+    const json = src === 'ext'
+      ? await analyzeViaExt(job, hint, (n) => { chars = n; tickText(); })
+      : await analyzeViaServer(job, hint, code);
     const model = normalizeModel(json);
     const seq = store.get('teardown.seq', 0) + 1;
     store.set('teardown.seq', seq);
@@ -822,7 +928,12 @@ $('analyzeBtn').addEventListener('click', async () => {
     loadItem(item);
     toast(`拆解完成：${model.object.name}，共 ${model.parts.length} 个零件`);
   } catch (err) {
+    if (err.code === 'not_allowed' || err.code === 'not_configured') {
+      extSend({ type: 'openOptions', allow: err.code === 'not_allowed' });
+      pingExt();
+    }
     showUploadError(`拆解失败：${err.message}`);
+    refreshUploadUI();
     uploadDlg.showModal();
   } finally {
     clearInterval(timer);
@@ -836,7 +947,7 @@ function resetUploadForm() {
   $('dropEmpty').hidden = false;
   $('hintInput').value = '';
   $('fileInput').value = '';
-  $('analyzeBtn').disabled = true;
+  refreshUploadUI();
 }
 
 // ---------------- 导入 / 导出 / 截图 ----------------
@@ -936,19 +1047,34 @@ function toast(msg) {
 }
 
 // ---------------- 启动 ----------------
+function updateStatus() {
+  if (ext.configured) {
+    $('aiDot').className = 'dot on';
+    $('aiStatus').textContent = `我的模型 · ${ext.model}`;
+  } else if (state.aiEnabled) {
+    $('aiDot').className = 'dot on';
+    $('aiStatus').textContent = `AI 已连接 · ${state.serverModel}`;
+  } else {
+    $('aiDot').className = 'dot off';
+    $('aiStatus').textContent = ext.installed ? '插件未配置模型 · 可浏览示例' : (state.serverChecked ? '未配置 AI · 可浏览示例' : '未连接服务器 · 仅示例');
+  }
+}
+
 async function checkAi() {
   try {
     const cfg = await (await fetch('/api/config')).json();
     state.aiEnabled = cfg.aiEnabled;
     state.needsCode = Boolean(cfg.needsCode);
-    $('aiDot').className = `dot ${cfg.aiEnabled ? 'on' : 'off'}`;
-    $('aiStatus').textContent = cfg.aiEnabled ? `AI 已连接 · ${cfg.model}` : '未配置 AI 密钥 · 可浏览示例';
+    state.serverModel = cfg.model;
+    state.serverChecked = true;
   } catch {
-    $('aiDot').className = 'dot off';
-    $('aiStatus').textContent = '未连接服务器 · 仅示例';
+    state.aiEnabled = false;
   }
+  updateStatus();
+  refreshUploadUI();
 }
 
 const lastId = store.get(LAST_KEY, null);
 loadItem(allItems().find((x) => x.id === lastId) || SAMPLES[0]);
 checkAi();
+pingExt();

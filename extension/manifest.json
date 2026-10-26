@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "拆解 LAB · 自带模型",
+  "version": "0.1.0",
+  "description": "在拆解 LAB 网站上使用你自己配置的大模型来拆解照片。API 密钥只保存在你的浏览器里，不会经过网站服务器。",
+  "icons": { "16": "icons/16.png", "32": "icons/32.png", "48": "icons/48.png", "128": "icons/128.png" },
+  "action": {
+    "default_title": "拆解 LAB · 模型设置",
+    "default_icon": { "16": "icons/16.png", "32": "icons/32.png" }
+  },
+  "background": { "service_worker": "background.js", "type": "module" },
+  "options_page": "options.html",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://api.deepseek.com/*",
+    "https://dashscope.aliyuncs.com/*",
+    "https://open.bigmodel.cn/*",
+    "https://ark.cn-beijing.volces.com/*",
+    "https://api.openai.com/*",
+    "https://api.anthropic.com/*"
+  ],
+  "optional_host_permissions": ["https://*/*", "http://*/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://*.workers.dev/*", "http://localhost/*", "http://127.0.0.1/*"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ]
+}

@@ -142,8 +142,27 @@ export const SYSTEM_PROMPT = `你是一名资深机械/产品结构工程师，�
 
 只通过 submit_teardown 输出结果，不要输出其它内容。`;
 
+// OpenAI 兼容接口没有强制工具调用，改为在系统提示里要求直接输出 JSON
+export const OPENAI_SYSTEM_PROMPT = `${SYSTEM_PROMPT.replace('只通过 submit_teardown 输出结果，不要输出其它内容。', '')}\n\n只输出一个 JSON 对象，不要任何解释或代码块标记。JSON 必须符合以下 JSON Schema：\n${JSON.stringify(TEARDOWN_SCHEMA)}`;
+
+export const USER_TEXT = '请识别照片中的物体，推断其完整内部结构，并输出可组装的 3D 拆解零件清单。';
+export const HINT_PREFIX = '用户补充说明：';
+
 export function buildUserText(hint) {
-  let t = '请识别照片中的物体，推断其完整内部结构，并输出可组装的 3D 拆解零件清单。';
-  if (hint && hint.trim()) t += `\n用户补充说明：${hint.trim().slice(0, 500)}`;
+  let t = USER_TEXT;
+  if (hint && hint.trim()) t += `\n${HINT_PREFIX}${hint.trim().slice(0, 500)}`;
   return t;
+}
+
+// 提供给浏览器插件：插件用用户自己的模型时，从网站读取同一份提示词
+export function promptPayload() {
+  return {
+    version: 1,
+    system: SYSTEM_PROMPT,
+    openaiSystem: OPENAI_SYSTEM_PROMPT,
+    schema: TEARDOWN_SCHEMA,
+    userText: USER_TEXT,
+    hintPrefix: HINT_PREFIX,
+    toolName: 'submit_teardown',
+  };
 }

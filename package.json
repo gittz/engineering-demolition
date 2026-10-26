@@ -1,16 +1,19 @@
 {
   "name": "engineering-demolition",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "AI 工程拆解：上传照片，AI 推断内部结构并生成可逐件查看的 3D 爆炸模型",
   "type": "module",
   "private": true,
   "scripts": {
     "start": "node server.js",
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "pack:ext": "node scripts/pack-extension.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"
   },
-  "engines": { "node": ">=18" }
+  "engines": {
+    "node": ">=18"
+  }
 }
