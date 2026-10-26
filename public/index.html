@@ -36,9 +36,9 @@
     <input type="file" id="importInput" accept="application/json,.json" hidden />
   </section>
 
-  <main class="workspace" id="workspace" data-mtab="parts">
+  <main class="workspace" id="workspace" data-sheet="closed">
     <aside class="left">
-      <div class="panel-head"><span>零件结构</span><span class="badge" id="partCount">0</span></div>
+      <div class="panel-head"><span>零件结构</span><span class="ph-right"><span class="badge" id="partCount">0</span><button class="drawer-close" id="drawerClose" type="button" aria-label="关闭">✕</button></span></div>
       <button class="model-card" id="modelCard">
         <span class="mc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M3 7l9 5 9-5M12 12v10"/></svg></span>
         <span><b id="mcName"></b><small id="mcSub"></small></span>
@@ -84,6 +84,7 @@
       <div class="tooltip" id="tooltip"></div>
 
       <div class="modebar" id="modebar">
+        <button class="parts-btn" id="partsBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>零件<span class="n" id="partsBtnN"></span></button>
         <button data-mode="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M3 7l9 5 9-5M12 12v10"/></svg>整机总览</button>
         <button data-mode="explode"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="m12 3 9 4.5-9 4.5-9-4.5z"/><path d="m3 12 9 4.5 9-4.5M3 16.5 12 21l9-4.5"/></svg>爆炸拆解</button>
         <button data-mode="xray"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4M8 12h8"/></svg>内部透视</button>
@@ -107,10 +108,7 @@
       </div>
     </section>
 
-    <nav class="mtabs" id="mtabs">
-      <button data-mtab="parts" class="on">零件<span class="n" id="mtabCount"></span></button>
-      <button data-mtab="info">概览 / 详情</button>
-    </nav>
+    <div class="drawer-mask" id="drawerMask"></div>
     <aside class="right" id="rightPanel"></aside>
   </main>
 

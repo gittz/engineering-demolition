@@ -423,26 +423,31 @@ renderer.domElement.addEventListener('pointerleave', () => {
   if (state.hovered) { state.hovered = null; refreshVisuals(); }
 });
 
-// ---------------- 手机端：零件 / 详情 标签 ----------------
+// ---------------- 手机端：底部详情面板 ----------------
+// 手机上整页不滚动：3D 视图在上，零件横条在下；选中零件时从底部弹出详情面板，3D 视图随之变矮并重新对焦。
 const isNarrow = () => window.matchMedia('(max-width: 900px)').matches;
-function setMTab(tab) {
-  $('workspace').dataset.mtab = tab;
-  document.querySelectorAll('#mtabs button').forEach((b) => b.classList.toggle('on', b.dataset.mtab === tab));
-}
-$('mtabs').addEventListener('click', (ev) => {
-  const b = ev.target.closest('[data-mtab]');
-  if (b) setMTab(b.dataset.mtab);
-});
-// 手机上从下方列表点零件时，若 3D 视图已滚出屏幕，滚回去让用户看到高亮
-function revealStage() {
+const ui = { overview: false, sheetHidden: false };
+const currentFocus = () => (state.mode === 'step' ? stepEntry() : state.selected);
+
+function syncSheet() {
+  const open = Boolean((currentFocus() && !ui.sheetHidden) || ui.overview);
+  const ws = $('workspace');
+  const want = open ? 'open' : 'closed';
+  if (ws.dataset.sheet === want) return;
+  ws.dataset.sheet = want;
   if (!isNarrow()) return;
-  if ($('stage').getBoundingClientRect().bottom < 120) window.scrollTo({ top: 0, behavior: 'smooth' });
+  // 面板展开/收起会改变 3D 视图高度：等布局完成后重新适配相机
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    resize();
+    const f = currentFocus();
+    if (f) focusEntry(f); else fitView(state.view);
+  }));
 }
 
 // ---------------- 选择 ----------------
 function select(e, { fly = true } = {}) {
   state.selected = e || null;
-  if (e) setMTab('info');
+  if (e) { ui.overview = false; ui.sheetHidden = false; }
   if (!e) state.solo = false;
   refreshVisuals();
   renderPartList();
@@ -481,6 +486,8 @@ function applyStep(fly = true) {
   state.step = Math.max(0, Math.min(n, state.step));
   for (const e of state.entries) e.tTarget = e.part.order <= state.step ? 1 : 0;
   const cur = stepEntry();
+  ui.sheetHidden = false;
+  ui.overview = false;
   $('stepNum').textContent = `STEP ${pad(state.step)} / ${pad(n)}`;
   $('stepName').textContent = cur ? `拆下 · ${cur.part.name}` : '完整装配 · 按 › 开始拆解';
   $('stepPrev').disabled = state.step === 0;
@@ -489,6 +496,7 @@ function applyStep(fly = true) {
   renderPartList();
   renderRight();
   if (fly && state.step === 1) fitView(state.view);
+  if (cur) document.querySelector(`.part[data-id="${CSS.escape(cur.part.id)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
 function stopPlay() {
@@ -535,7 +543,7 @@ function renderPartList() {
   }
   list.innerHTML = html;
   $('partCount').textContent = state.entries.length;
-  $('mtabCount').textContent = state.entries.length;
+  $('partsBtnN').textContent = state.entries.length;
   $('modelCard').classList.toggle('dim', Boolean(focus));
 }
 
@@ -555,16 +563,15 @@ $('partList').addEventListener('click', (ev) => {
   const row = ev.target.closest('.part');
   if (!row) return;
   const e = byId(row.dataset.id);
+  closeDrawer();
   if (state.mode === 'step') {
     state.step = e.part.order;
     applyStep();
-    setMTab('info');
-    revealStage();
     return;
   }
   if (e.hidden) { e.hidden = false; }
-  select(e === state.selected ? null : e);
-  revealStage();
+  // 手机上点击即查看（再次点击同一零件不取消选择）；桌面端点击已选零件则取消
+  select(e === state.selected && !isNarrow() ? null : e);
 });
 $('partList').addEventListener('dblclick', (ev) => {
   const row = ev.target.closest('.part');
@@ -583,16 +590,32 @@ $('showAllBtn').addEventListener('click', () => {
 $('modelCard').addEventListener('click', () => {
   if (state.mode === 'step') { state.step = 0; applyStep(); }
   select(null);
+  closeDrawer();
+  ui.overview = isNarrow();
+  renderRight();
   fitView(state.view);
 });
+
+// 手机端左侧零件抽屉
+function openDrawer() {
+  $('workspace').dataset.drawer = 'open';
+  document.querySelector('.part.active')?.scrollIntoView({ block: 'center' });
+}
+function closeDrawer() { $('workspace').dataset.drawer = 'closed'; }
+$('partsBtn').addEventListener('click', openDrawer);
+$('drawerClose').addEventListener('click', closeDrawer);
+$('drawerMask').addEventListener('click', closeDrawer);
 
 // ---------------- 右侧面板 ----------------
 const CUBE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M3 7l9 5 9-5M12 12v10"/></svg>';
 const fmt = (v) => (v >= 100 ? Math.round(v) : Math.round(v * 10) / 10);
 
+const SHEET_CLOSE = '<button class="sheet-close" id="sheetClose" aria-label="关闭">✕</button>';
+
 function renderRight() {
   const rp = $('rightPanel');
   const focus = state.mode === 'step' ? stepEntry() : state.selected;
+  syncSheet();
   if (!state.model) { rp.innerHTML = ''; return; }
   if (focus) return renderPartDetail(rp, focus);
   const o = state.model.object;
@@ -600,7 +623,7 @@ function renderRight() {
   const sz = o.overall_size_mm.some((x) => x > 0) ? o.overall_size_mm : [state.sizeMM.x, state.sizeMM.y, state.sizeMM.z];
   const meta = state.model.meta;
   const source = state.item?.sample ? '内置示例' : state.item?.imported ? '导入文件' : `AI 推断${meta?.model ? ` · ${esc(meta.model)}` : ''}${meta?.via === 'extension' ? '（我的模型）' : ''}`;
-  rp.innerHTML = `
+  rp.innerHTML = `${SHEET_CLOSE}
     <div class="rp-head"><span>模型概览</span></div>
     <div class="rp-icon">${CUBE}</div>
     <div class="rp-eyebrow">Object overview</div>
@@ -629,7 +652,7 @@ function renderPartDetail(rp, e) {
   const n = state.entries.length;
   const sz = e.sizeMM;
   const step = state.mode === 'step';
-  rp.innerHTML = `
+  rp.innerHTML = `${SHEET_CLOSE}
     <div class="rp-head"><button class="back" id="backBtn">← 返回概览</button><span class="badge">${step ? `STEP ${pad(p.order)}` : pad(e.listNo)} / ${pad(n)}</span></div>
     <div class="rp-icon num">${pad(step ? p.order : e.listNo)}</div>
     <div class="rp-eyebrow">Part detail · ${esc(p.group)}</div>
@@ -654,9 +677,18 @@ function renderPartDetail(rp, e) {
 $('rightPanel').addEventListener('click', (ev) => {
   const t = ev.target.closest('button');
   if (!t) return;
-  if (t.id === 'backBtn') {
+  if (t.id === 'sheetClose') {
+    ui.overview = false;
+    if (state.mode === 'step') ui.sheetHidden = true;
+    else if (state.selected) select(null, { fly: false });
+    renderPartList();
+    renderRight();
+  } else if (t.id === 'backBtn') {
     if (state.mode === 'step') { state.step = 0; applyStep(); } else select(null);
-    fitView(state.view);
+    ui.overview = isNarrow();
+    renderPartList();
+    renderRight();
+    if (!isNarrow()) fitView(state.view);
   } else if (t.id === 'soloBtn') {
     state.solo = !state.solo;
     refreshVisuals();
@@ -724,6 +756,8 @@ function loadItem(item) {
   state.hovered = null;
   state.solo = false;
   state.step = 0;
+  ui.overview = false;
+  ui.sheetHidden = false;
   buildModel(model);
   store.set(LAST_KEY, item.id);
   const o = model.object;
@@ -1055,6 +1089,7 @@ $('stepNext').addEventListener('click', () => { stopPlay(); state.step += 1; app
 $('stepPlay').addEventListener('click', togglePlay);
 window.addEventListener('keydown', (ev) => {
   if (ev.target.closest('input, textarea, dialog')) return;
+  if (ev.key === 'Escape' && $('workspace').dataset.drawer === 'open') { closeDrawer(); return; }
   if (ev.key === 'Escape') { if (state.mode === 'step') { state.step = 0; applyStep(); } else select(null); }
   if (state.mode === 'step' && (ev.key === 'ArrowRight' || ev.key === 'ArrowLeft')) {
     stopPlay();

@@ -319,83 +319,129 @@ svg { width: 18px; height: 18px; flex: none; }
   .crumbs { display: none; }
   .topbar { grid-template-columns: 1fr auto; }
 }
-.mtabs { display: none; }
+.mtabs, .ov-chip, .sheet-close, .parts-btn, .drawer-close, .drawer-mask { display: none; }
+.ph-right { display: flex; align-items: center; gap: 8px; }
+.modebar .parts-btn { display: none; }
 
-/* ---------- 手机 / 窄屏：3D 视图在上，下方「零件 / 详情」标签切换 ---------- */
+/* ---------- 手机 / 窄屏：App 式布局 ----------
+   整页不滚动：顶栏 → 3D 视图（自适应剩余高度）→ 零件横条 → 底部详情面板（选中零件时弹出）
+   点零件横条，上方 3D 立即高亮并聚焦，无需上下滚动。 */
 @media (max-width: 900px) {
-  html, body { height: auto; }
-  body { display: block; overflow-x: hidden; overflow-y: auto; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    display: flex; flex-direction: column; overflow: hidden;
+    height: 100vh; height: 100dvh; -webkit-tap-highlight-color: transparent;
+  }
 
-  .topbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; height: 52px; padding: 0 14px; }
+  .topbar { flex: none; display: flex; justify-content: space-between; align-items: center; gap: 10px; height: 48px; padding: 0 12px; }
   .brand { gap: 8px; min-width: 0; }
-  .logo { width: 32px; height: 32px; border-radius: 8px; }
-  .logo svg { width: 18px; height: 18px; }
+  .logo { width: 30px; height: 30px; border-radius: 8px; }
+  .logo svg { width: 17px; height: 17px; }
   .brand-title { font-size: 15px; letter-spacing: .08em; white-space: nowrap; }
   .brand-sub, .crumbs, .ver { display: none; }
   .status { font-size: 12px; min-width: 0; gap: 6px; }
-  #aiStatus { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 48vw; }
+  #aiStatus { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46vw; }
 
-  .library { padding: 10px 14px; gap: 8px; }
-  .lib-upload { padding: 8px 12px; gap: 8px; border-radius: 9px; }
-  .lib-upload svg { width: 18px; height: 18px; }
+  .library { flex: none; padding: 8px 12px; gap: 8px; }
+  .lib-upload { padding: 6px 12px; gap: 6px; border-radius: 9px; }
+  .lib-upload svg { width: 17px; height: 17px; }
   .lib-upload b { font-size: 14px; white-space: nowrap; }
   .lib-upload small { display: none; }
   .lib-tabs { gap: 8px; scrollbar-width: none; }
   .lib-tabs::-webkit-scrollbar { display: none; }
-  .lib-tab { width: 160px; padding: 7px 10px; gap: 8px; border-radius: 9px; }
+  .lib-tab { width: 150px; padding: 6px 10px; gap: 8px; border-radius: 9px; }
   .lib-tab .no { display: none; }
-  .lib-tab .thumb { width: 30px; height: 30px; }
-  .lib-tab b { font-size: 13px; max-width: 112px; }
-  .lib-tab small { font-size: 11px; max-width: 112px; }
+  .lib-tab .thumb { width: 28px; height: 28px; }
+  .lib-tab b { font-size: 13px; max-width: 104px; }
+  .lib-tab small { font-size: 11px; max-width: 104px; }
   .lib-tab .del { opacity: 1; }
-  .lib-import { padding: 0 12px; border-radius: 9px; font-size: 13px; }
+  .lib-import { padding: 0 10px; border-radius: 9px; font-size: 13px; }
 
-  .workspace { display: flex; flex-direction: column; }
-  .stage { order: 1; height: 62vh; height: 62svh; min-height: 400px; }
-  .mtabs {
-    order: 2; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
-    position: sticky; top: 0; z-index: 6; padding: 10px 14px;
-    background: var(--bg-2); border-bottom: 1px solid var(--line);
+  .workspace { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+  /* 3D 视图：占满剩余空间，详情面板弹出时自动变矮 */
+  .stage { order: 1; flex: 1 1 auto; min-height: 220px; }
+
+  /* 零件列表：左侧抽屉 */
+  .left {
+    position: fixed; z-index: 40; top: 0; bottom: 0; left: 0;
+    width: min(84vw, 320px); padding: 14px 12px calc(20px + env(safe-area-inset-bottom));
+    border-right: 1px solid var(--line-2); overflow-y: auto; overscroll-behavior: contain;
+    transform: translateX(-104%); transition: transform .22s ease; box-shadow: 8px 0 30px rgba(0, 0, 0, .4);
   }
-  .mtabs button { background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 9px; color: var(--text-2); font-size: 14px; }
-  .mtabs button.on { background: #173a37; border-color: var(--accent-2); color: var(--text); font-weight: 600; }
-  .mtabs .n { font-family: var(--mono); font-size: 12px; color: var(--text-3); margin-left: 4px; }
-  .left, .right { order: 3; border: 0; overflow: visible; padding: 14px 14px 40px; }
-  .workspace[data-mtab="parts"] .right, .workspace[data-mtab="info"] .left { display: none; }
-  .left .panel-head { display: none; }
+  .workspace[data-drawer="open"] .left { transform: none; }
+  .drawer-mask { display: block; position: fixed; inset: 0; z-index: 39; background: rgba(5, 10, 14, .55); opacity: 0; pointer-events: none; transition: opacity .22s; }
+  .workspace[data-drawer="open"] .drawer-mask { opacity: 1; pointer-events: auto; }
+  .left .panel-head { padding: 2px 4px 12px; }
+  .drawer-close { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line-2); background: var(--panel); color: var(--text-2); font-size: 14px; }
+  .left .list-head { padding: 16px 6px 4px; }
   .part { padding: 11px 8px; }
   .part .eye { opacity: .6; }
 
-  .stage-head { left: 14px; top: 12px; right: 150px; max-width: none; }
+  /* 打开抽屉的按钮：放在底部工具栏最左侧 */
+  .parts-btn {
+    display: flex !important; flex: none !important; align-items: center; gap: 5px;
+    background: var(--accent) !important; color: #06231d !important; font-weight: 700; border-radius: 8px;
+  }
+  .parts-btn svg { display: block !important; width: 16px; height: 16px; }
+  .parts-btn .n { font-family: var(--mono); font-size: 11px; opacity: .75; margin-left: 2px; }
+
+  /* 底部详情面板 */
+  .right {
+    order: 3; flex: none; display: none; position: relative;
+    max-height: 40vh; max-height: 40dvh; overflow-y: auto; overscroll-behavior: contain;
+    border: 0; border-top: 1px solid var(--line-2); border-radius: 16px 16px 0 0;
+    padding: 14px 16px calc(16px + env(safe-area-inset-bottom));
+    background: var(--bg-2); box-shadow: 0 -10px 30px rgba(0, 0, 0, .35);
+    animation: sheet-in .2s ease-out;
+  }
+  .workspace[data-sheet="open"] .right { display: block; }
+  /* 面板展开时 3D 视图变矮：收起标题和浮层，把空间留给模型 */
+  .workspace[data-sheet="open"] .stage-head,
+  .workspace[data-sheet="open"] .stage-tools,
+  .workspace[data-sheet="open"] .float-ctl { display: none !important; }
+  .right .rp-head:has(#backBtn) { display: none; }
+  @keyframes sheet-in { from { transform: translateY(24px); opacity: .4; } to { transform: none; opacity: 1; } }
+  .sheet-close {
+    display: grid; place-items: center; position: sticky; top: 0; float: right; z-index: 2;
+    width: 30px; height: 30px; margin: -4px -6px 0 8px; border-radius: 50%;
+    border: 1px solid var(--line-2); background: var(--panel); color: var(--text-2); font-size: 14px;
+  }
+  .right .rp-head { margin-bottom: 8px; font-size: 14px; }
+  .right .rp-head .badge { display: none; }
+  .right .rp-icon { display: none; }
+  .right .rp-eyebrow { font-size: 11px; }
+  .right .rp-title { font-size: 20px; margin: 2px 0; }
+  .right .rp-en { margin-bottom: 4px; }
+  .right .rp-text { margin: 6px 0 10px; line-height: 1.7; font-size: 13px; }
+  .right .rp-row { padding: 9px 0; font-size: 13px; }
+  .right .rp-sec { margin: 14px 0 6px; }
+  .right .rp-actions { position: sticky; bottom: -16px; margin: 12px -16px -16px; padding: 10px 16px; background: var(--bg-2); border-top: 1px solid var(--line); }
+  .right .rp-actions .btn { flex: 1; padding: 8px 10px; }
+
+  /* 3D 视图上的浮层（视图变矮时也要放得下） */
+  .stage-head { left: 12px; top: 10px; right: 150px; max-width: none; }
   .eyebrow { font-size: 10px; letter-spacing: .14em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .stage-head h1 { font-size: 19px; margin: 2px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .stage-head h1 { font-size: 18px; margin: 2px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .stage-head h1 em { font-size: 12px; margin-left: 4px; }
   .stage-head .sub { display: none; }
-  .stage-tools { right: 12px; top: 12px; gap: 6px; }
+  .stage-tools { right: 10px; top: 10px; gap: 6px; }
   .stage-tools .icon, .stage-tools .pill { width: 34px; height: 34px; border-radius: 8px; padding: 0; box-shadow: none; }
   .stage-tools .pill { font-size: 0; gap: 0; }
   .stage-tools svg { width: 16px; height: 16px; }
-
-  .float-ctl { left: 12px; right: 12px; top: 64px; overflow-x: auto; scrollbar-width: none; }
-  .float-ctl button { padding: 6px 10px; white-space: nowrap; flex: none; }
-  .float-ctl.range { padding: 6px 12px; gap: 10px; }
+  .float-ctl { left: 10px; right: 10px; top: 58px; overflow-x: auto; scrollbar-width: none; }
+  .float-ctl button { padding: 5px 10px; white-space: nowrap; flex: none; }
+  .float-ctl.range { padding: 5px 12px; gap: 10px; }
   .float-ctl.range input { flex: 1; width: auto; min-width: 0; }
-
-  .modebar { left: 8px; right: 8px; bottom: 10px; transform: none; padding: 4px; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+  .modebar { left: 8px; right: 8px; bottom: 8px; transform: none; padding: 4px; gap: 2px; overflow-x: auto; scrollbar-width: none; box-shadow: none; }
   .modebar::-webkit-scrollbar { display: none; }
-  .modebar button { flex: 1 0 auto; justify-content: center; padding: 8px 10px; font-size: 13px; }
+  .modebar button { flex: 1 0 auto; justify-content: center; padding: 7px 10px; font-size: 13px; }
   .modebar button svg { display: none; }
   .viewbar, .hint, .tooltip { display: none; }
-  .step-ctl { left: 8px; right: 8px; bottom: 60px; transform: none; min-width: 0; padding: 6px 8px; }
+  .step-ctl { left: 8px; right: 8px; bottom: 56px; transform: none; min-width: 0; padding: 5px 8px; }
   .step-info b { font-size: 14px; }
 
-  .rp-head { margin-bottom: 14px; }
-  .rp-icon { width: 48px; height: 48px; border-radius: 12px; margin-bottom: 14px; }
-  .rp-icon svg { width: 24px; height: 24px; }
-  .rp-title { font-size: 22px; }
-  .rp-text { margin: 8px 0 14px; }
-
-  .dlg { max-height: calc(100vh - 24px); max-height: calc(100svh - 24px); overflow-y: auto; }
+  .dlg { max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); overflow-y: auto; }
   .dlg-body { padding: 16px; gap: 12px; }
   .drop { min-height: 170px; }
   .drop img { max-height: 240px; }
