@@ -100,15 +100,36 @@ async function callOpenAI(c, hint, dataUrl) {
       },
     ],
   };
-  if (o.jsonMode) body.response_format = { type: 'json_object' };
-  const res = await fetch(`${o.base}/chat/completions`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${o.key}` },
-    body: JSON.stringify(body),
-  });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw httpError(502, `AI 接口错误 (${res.status})：${json?.error?.message || res.statusText}`);
-  return extractJson(json.choices?.[0]?.message?.content);
+  const send = async (jsonMode) => {
+    const req = { ...body };
+    if (jsonMode) req.response_format = { type: 'json_object' };
+    const res = await fetch(`${o.base}/chat/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${o.key}` },
+      body: JSON.stringify(req),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw httpError(502, `AI 接口错误 (${res.status}，模型 ${o.model})：${json?.error?.message || res.statusText}`);
+    const choice = json.choices?.[0] || {};
+    let text = choice.message?.content;
+    if (Array.isArray(text)) text = text.map((x) => x?.text || '').join('');
+    return { text: (text || '').trim(), finish: choice.finish_reason, raw: json };
+  };
+
+  let r = await send(o.jsonMode);
+  // 部分服务（如 DeepSeek）的 JSON 模式偶尔返回空内容：关闭 JSON 模式重试一次
+  if (!r.text && o.jsonMode && r.finish !== 'length') r = await send(false);
+  if (!r.text) {
+    console.error('[openai] 空响应：', JSON.stringify(r.raw).slice(0, 800));
+    const why = r.finish === 'length'
+      ? '输出达到长度上限被截断，请调大 MAX_OUTPUT_TOKENS'
+      : `finish_reason=${r.finish ?? '无'}`;
+    throw httpError(502, `AI 没有返回内容（模型 ${o.model}，${why}）。请确认模型名正确、且该模型支持图片输入`);
+  }
+  if (r.finish === 'length') {
+    throw httpError(502, `AI 输出被截断（模型 ${o.model}），请调大 MAX_OUTPUT_TOKENS 后重试`);
+  }
+  return extractJson(r.text);
 }
 
 export async function analyze(body, env) {
