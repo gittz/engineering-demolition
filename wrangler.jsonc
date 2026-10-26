@@ -1,0 +1,21 @@
+{
+  // Cloudflare Workers 配置（GitHub 自动部署时由 Workers Builds 执行 `npx wrangler deploy`）
+  // 注意：name 必须与 Cloudflare 控制台里的 Worker 名称一致
+  "name": "engineering-demolition",
+  "main": "worker/index.js",
+  "compatibility_date": "2025-09-01",
+
+  // public/ 下的静态页面由 Cloudflare 直接托管；/api/* 找不到静态文件，交给 Worker 处理
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+
+  // 让 Worker 尽量靠近 AI 接口所在地区运行（减少延迟，也避免部分地区访问 Anthropic 受限）
+  "placement": { "mode": "smart" },
+
+  // 部署时保留在控制台里设置的环境变量（API Key 请用 Secret 设置，见 README）
+  "keep_vars": true,
+
+  "observability": { "enabled": true }
+}
