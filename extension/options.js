@@ -12,7 +12,8 @@ function setMsg(text, kind = '') {
 
 function fill(cfg) {
   $('preset').value = cfg.preset || 'custom';
-  document.querySelector(`input[name=provider][value=${cfg.provider === 'anthropic' ? 'anthropic' : 'openai'}]`).checked = true;
+  const prov = ['openai', 'responses', 'anthropic'].includes(cfg.provider) ? cfg.provider : 'openai';
+  document.querySelector(`input[name=provider][value=${prov}]`).checked = true;
   $('baseUrl').value = cfg.baseUrl || '';
   $('apiKey').value = cfg.apiKey || '';
   $('model').value = cfg.model || '';
@@ -102,6 +103,7 @@ async function init() {
     const keep = $('apiKey').value;
     fill({ preset: $('preset').value, ...p, apiKey: keep });
     if ($('preset').value === 'doubao') setMsg('豆包请在「模型名」填写方舟控制台里的推理接入点 ID（ep-...）或模型 ID');
+    else if ($('preset').value === 'responses') setMsg('填写网关地址（通常以 /v1 结尾）、密钥和模型名；Codex 配置里 wire_api = "responses" 的网关选这个');
     else setMsg('');
   });
   $('toggleKey').addEventListener('click', () => {

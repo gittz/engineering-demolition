@@ -21,7 +21,7 @@ input, select { background: var(--card); border: 1px solid var(--line2); border-
 input:focus, select:focus { outline: none; border-color: var(--accent2); }
 .row { display: flex; gap: 8px; align-items: center; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.seg { display: flex; gap: 18px; color: var(--text); padding: 4px 0; }
+.seg { display: flex; flex-wrap: wrap; gap: 8px 18px; color: var(--text); padding: 4px 0; }
 .seg input { width: auto; accent-color: var(--accent); }
 .btn { border-radius: 9px; padding: 9px 18px; border: 1px solid var(--line2); background: var(--card); color: var(--text); font: inherit; cursor: pointer; white-space: nowrap; }
 .btn:hover { border-color: var(--accent2); }

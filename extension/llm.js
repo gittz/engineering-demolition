@@ -1,5 +1,8 @@
 // 直接调用用户配置的大模型（流式输出，便于显示进度、避免长时间无响应）
-// 支持两种接口格式：OpenAI 兼容（DeepSeek / 通义千问 / 智谱 / 豆包 / OpenAI 等）与 Anthropic。
+// 支持三种接口格式：
+//  - openai：OpenAI 兼容的 Chat Completions（/chat/completions）—— DeepSeek / 通义千问 / 智谱 / 豆包 / OpenAI 等
+//  - responses：OpenAI Responses 接口（/responses）—— OpenAI 新接口及部分企业网关（如 Codex 配置里 wire_api = "responses"）
+//  - anthropic：Anthropic Messages 接口（/v1/messages）
 
 export const PRESETS = {
   deepseek: { label: 'DeepSeek 视觉', provider: 'openai', baseUrl: 'https://api.deepseek.com', model: 'deepseek-v4-flash-vision-exp', jsonMode: true, maxTokens: 64000 },
@@ -7,6 +10,7 @@ export const PRESETS = {
   glm: { label: '智谱 GLM 视觉', provider: 'openai', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4.5v', jsonMode: false, maxTokens: 16000 },
   doubao: { label: '豆包 视觉（火山方舟）', provider: 'openai', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', model: '', jsonMode: false, maxTokens: 16000 },
   openai: { label: 'OpenAI', provider: 'openai', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o', jsonMode: true, maxTokens: 16000 },
+  responses: { label: 'OpenAI Responses 接口 / 企业网关', provider: 'responses', baseUrl: 'https://api.openai.com/v1', model: '', jsonMode: true, maxTokens: 64000 },
   anthropic: { label: 'Anthropic Claude', provider: 'anthropic', baseUrl: 'https://api.anthropic.com', model: 'claude-sonnet-5-5', jsonMode: false, maxTokens: 16000 },
   custom: { label: '自定义', provider: 'openai', baseUrl: '', model: '', jsonMode: true, maxTokens: 16000 },
 };
@@ -107,6 +111,65 @@ async function openaiStream(cfg, prompt, image, userText, jsonMode, { signal, on
   return { text: text.trim(), finish };
 }
 
+async function responsesStream(cfg, prompt, image, userText, jsonMode, { signal, onProgress }) {
+  const body = {
+    model: cfg.model,
+    instructions: prompt.openaiSystem,
+    input: [{
+      role: 'user',
+      content: [
+        { type: 'input_image', image_url: image },
+        { type: 'input_text', text: userText },
+      ],
+    }],
+    max_output_tokens: Number(cfg.maxTokens) || 16000,
+    stream: true,
+  };
+  if (jsonMode) body.text = { format: { type: 'json_object' } };
+  const res = await request(`${base(cfg)}/responses`, {
+    method: 'POST',
+    signal,
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${cfg.apiKey}` },
+    body: JSON.stringify(body),
+  }, cfg);
+
+  let text = '';
+  let thinking = 0;
+  let finish = null;
+  let final = null;
+  for await (const ev of readSSE(res)) {
+    switch (ev.type) {
+      case 'response.output_text.delta':
+        text += ev.delta || '';
+        break;
+      case 'response.reasoning_text.delta':
+      case 'response.reasoning_summary_text.delta':
+        thinking += (ev.delta || '').length;
+        break;
+      case 'response.completed':
+        finish = 'stop';
+        final = ev.response;
+        break;
+      case 'response.incomplete':
+        finish = ev.response?.incomplete_details?.reason === 'max_output_tokens' ? 'length' : (ev.response?.incomplete_details?.reason || 'incomplete');
+        final = ev.response;
+        break;
+      case 'response.failed':
+        throw fail(`模型接口错误：${ev.response?.error?.message || '请求失败'}`);
+      case 'error':
+        throw fail(`模型接口错误：${ev.message || ev.error?.message || JSON.stringify(ev).slice(0, 200)}`);
+      default:
+        break;
+    }
+    onProgress?.(text.length + thinking);
+  }
+  // 少数网关不推送 delta，只在 completed 里给完整结果
+  if (!text && final?.output) {
+    text = final.output.flatMap((o) => o.content || []).filter((c) => c.type === 'output_text').map((c) => c.text).join('');
+  }
+  return { text: text.trim(), finish };
+}
+
 async function anthropicStream(cfg, prompt, image, userText, { signal, onProgress }) {
   const m = /^data:(image\/[\w.+-]+);base64,(.+)$/i.exec(image);
   const res = await request(`${base(cfg)}/v1/messages`, {
@@ -160,9 +223,10 @@ export async function callModel(cfg, prompt, image, hint, opts = {}) {
   if (cfg.provider === 'anthropic') {
     r = await anthropicStream(cfg, prompt, image, userText, opts);
   } else {
-    r = await openaiStream(cfg, prompt, image, userText, cfg.jsonMode, opts);
+    const run = cfg.provider === 'responses' ? responsesStream : openaiStream;
+    r = await run(cfg, prompt, image, userText, cfg.jsonMode, opts);
     // 部分服务的 JSON 模式偶尔返回空内容：关闭 JSON 模式重试一次
-    if (!r.text && cfg.jsonMode && r.finish !== 'length') r = await openaiStream(cfg, prompt, image, userText, false, opts);
+    if (!r.text && cfg.jsonMode && r.finish !== 'length') r = await run(cfg, prompt, image, userText, false, opts);
   }
   if (r.finish === 'length') throw fail(`模型输出达到长度上限被截断（当前 ${cfg.maxTokens}），请在插件设置里调大「最大输出」`);
   if (!r.text) throw fail(`模型没有返回内容（模型 ${cfg.model}）。请确认模型名正确，且该模型支持图片输入`);
@@ -186,7 +250,9 @@ export async function testModel(cfg, image) {
   const t0 = Date.now();
   const r = cfg.provider === 'anthropic'
     ? await anthropicStream({ ...cfg, maxTokens: 300 }, prompt, image, userText, opts)
-    : await openaiStream({ ...cfg, maxTokens: 1500 }, prompt, image, userText, false, opts);
+    : cfg.provider === 'responses'
+      ? await responsesStream({ ...cfg, maxTokens: 2000 }, prompt, image, userText, false, opts)
+      : await openaiStream({ ...cfg, maxTokens: 1500 }, prompt, image, userText, false, opts);
   if (!r.text) throw fail('模型没有返回内容，请确认模型名正确且支持图片输入');
   return { reply: r.text.slice(0, 200), ms: Date.now() - t0 };
 }
