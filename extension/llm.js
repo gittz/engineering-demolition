@@ -119,7 +119,8 @@ async function responsesStream(cfg, prompt, image, userText, jsonMode, { signal,
       role: 'user',
       content: [
         { type: 'input_image', image_url: image },
-        { type: 'input_text', text: userText },
+        // Responses 接口的 JSON 模式要求用户消息里出现 "json" 字样
+        { type: 'input_text', text: jsonMode ? `${userText}\n请只输出一个 JSON 对象（json），不要任何其它文字。` : userText },
       ],
     }],
     max_output_tokens: Number(cfg.maxTokens) || 16000,
@@ -224,7 +225,13 @@ export async function callModel(cfg, prompt, image, hint, opts = {}) {
     r = await anthropicStream(cfg, prompt, image, userText, opts);
   } else {
     const run = cfg.provider === 'responses' ? responsesStream : openaiStream;
-    r = await run(cfg, prompt, image, userText, cfg.jsonMode, opts);
+    try {
+      r = await run(cfg, prompt, image, userText, cfg.jsonMode, opts);
+    } catch (e) {
+      // 服务商不接受 JSON 模式参数（如 400 提示 json / response_format / text.format）：关闭后重试
+      if (!cfg.jsonMode || e.name === 'AbortError' || !/json|response_format|text\.format/i.test(e.message)) throw e;
+      r = await run(cfg, prompt, image, userText, false, opts);
+    }
     // 部分服务的 JSON 模式偶尔返回空内容：关闭 JSON 模式重试一次
     if (!r.text && cfg.jsonMode && r.finish !== 'length') r = await run(cfg, prompt, image, userText, false, opts);
   }

@@ -5,13 +5,16 @@
   document.documentElement.dataset.teardownExt = VERSION;
 
   const post = (msg) => window.postMessage({ source: 'teardown-ext', version: VERSION, ...msg }, location.origin);
-  const status = () => chrome.runtime.sendMessage({ type: 'status' });
+  // 插件在 chrome://extensions 里被刷新/更新后，已打开页面里的旧脚本会与后台断开（chrome.runtime 变为 undefined）
+  const alive = () => Boolean(globalThis.chrome?.runtime?.id);
+  const STALE = '插件刚刚更新过，请刷新本页面后重试';
+  const status = () => (alive() ? chrome.runtime.sendMessage({ type: 'status' }) : Promise.reject(new Error(STALE)));
 
   async function announce(type, id) {
     try {
       post({ type, id, ...(await status()) });
     } catch (e) {
-      post({ type, id, installed: true, configured: false, error: '插件已更新，请刷新页面' });
+      post({ type, id, installed: true, configured: false, error: STALE });
     }
   }
 
@@ -31,9 +34,10 @@
 
     let port;
     try {
+      if (!alive()) throw new Error(STALE);
       port = chrome.runtime.connect({ name: 'teardown' });
     } catch {
-      return fail('插件已更新，请刷新页面后重试');
+      return fail(STALE, 'stale');
     }
     // 定时 ping，避免插件后台在长时间等待模型时被浏览器休眠
     const ping = setInterval(() => { try { port.postMessage({ type: 'ping' }); } catch { /* ignore */ } }, 15000);
@@ -58,8 +62,13 @@
     const m = ev.data;
     if (!m || m.source !== 'teardown-page') return;
     if (m.type === 'status') announce('status', m.id);
-    else if (m.type === 'openOptions') chrome.runtime.sendMessage({ type: 'openOptions', allow: Boolean(m.allow) }).catch(() => {});
-    else if (m.type === 'analyze') analyze(m);
+    else if (m.type === 'openOptions') {
+      if (alive()) chrome.runtime.sendMessage({ type: 'openOptions', allow: Boolean(m.allow) }).catch(() => {});
+      else post({ type: 'error', id: m.id, message: STALE, code: 'stale' });
+    } else if (m.type === 'analyze') {
+      if (alive()) analyze(m);
+      else post({ type: 'error', id: m.id, message: STALE, code: 'stale' });
+    }
   });
 
   announce('ready');
