@@ -422,9 +422,26 @@ renderer.domElement.addEventListener('pointerleave', () => {
   if (state.hovered) { state.hovered = null; refreshVisuals(); }
 });
 
+// ---------------- 手机端：零件 / 详情 标签 ----------------
+const isNarrow = () => window.matchMedia('(max-width: 900px)').matches;
+function setMTab(tab) {
+  $('workspace').dataset.mtab = tab;
+  document.querySelectorAll('#mtabs button').forEach((b) => b.classList.toggle('on', b.dataset.mtab === tab));
+}
+$('mtabs').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-mtab]');
+  if (b) setMTab(b.dataset.mtab);
+});
+// 手机上从下方列表点零件时，若 3D 视图已滚出屏幕，滚回去让用户看到高亮
+function revealStage() {
+  if (!isNarrow()) return;
+  if ($('stage').getBoundingClientRect().bottom < 120) window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
 // ---------------- 选择 ----------------
 function select(e, { fly = true } = {}) {
   state.selected = e || null;
+  if (e) setMTab('info');
   if (!e) state.solo = false;
   refreshVisuals();
   renderPartList();
@@ -517,6 +534,7 @@ function renderPartList() {
   }
   list.innerHTML = html;
   $('partCount').textContent = state.entries.length;
+  $('mtabCount').textContent = state.entries.length;
   $('modelCard').classList.toggle('dim', Boolean(focus));
 }
 
@@ -539,10 +557,13 @@ $('partList').addEventListener('click', (ev) => {
   if (state.mode === 'step') {
     state.step = e.part.order;
     applyStep();
+    setMTab('info');
+    revealStage();
     return;
   }
   if (e.hidden) { e.hidden = false; }
   select(e === state.selected ? null : e);
+  revealStage();
 });
 $('partList').addEventListener('dblclick', (ev) => {
   const row = ev.target.closest('.part');
@@ -784,6 +805,9 @@ window.addEventListener('message', (ev) => {
   extPending.get(m.id)?.(m);
 });
 const pingExt = () => extSend({ type: 'status', id: 0 });
+if (window.matchMedia('(pointer: coarse)').matches) {
+  document.querySelector('#dropEmpty b').textContent = '点击拍照或从相册选择一张照片';
+}
 window.addEventListener('focus', pingExt);
 
 function analyzeViaExt(job, hint, onProgress) {
@@ -850,6 +874,10 @@ function refreshUploadUI() {
   $('srcExtInfo').textContent = !ext.installed ? '未安装插件' : !extOk ? '插件已安装，但还没有配置模型'
     : `${ext.label ? `${ext.label} · ` : ''}${ext.model}${ext.allowed ? '' : ' · 首次使用需在插件中允许本网站'}`;
   $('srcSrvInfo').textContent = srvOk ? `${state.serverModel}${state.needsCode ? ' · 需要访问码' : ''}` : '网站未配置模型';
+  // 手机/平板浏览器不支持扩展插件：没装插件时隐藏「我的模型」相关入口
+  const noExtDevice = !ext.installed && window.matchMedia('(pointer: coarse)').matches;
+  $('srcExt').hidden = noExtDevice;
+  $('extBtn').hidden = noExtDevice;
   $('extBtn').textContent = !ext.installed ? '安装插件，用自己的模型' : '打开插件设置';
   $('srcHint').textContent = !ext.installed ? '' : '密钥只保存在你的浏览器里';
 
@@ -873,7 +901,9 @@ $('openUpload').addEventListener('click', () => {
   pingExt();
   refreshUploadUI();
   if (!ext.configured && !state.aiEnabled) {
-    showUploadError('当前没有可用的模型：安装浏览器插件并配置你自己的模型，或由站点管理员在服务器配置密钥。');
+    showUploadError(window.matchMedia('(pointer: coarse)').matches
+      ? '网站暂未配置模型，请稍后再试，或在电脑上安装浏览器插件使用自己的模型。'
+      : '当前没有可用的模型：安装浏览器插件并配置你自己的模型，或由站点管理员在服务器配置密钥。');
   }
   uploadDlg.showModal();
 });

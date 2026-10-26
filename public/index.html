@@ -36,7 +36,7 @@
     <input type="file" id="importInput" accept="application/json,.json" hidden />
   </section>
 
-  <main class="workspace">
+  <main class="workspace" id="workspace" data-mtab="parts">
     <aside class="left">
       <div class="panel-head"><span>零件结构</span><span class="badge" id="partCount">0</span></div>
       <button class="model-card" id="modelCard">
@@ -107,6 +107,10 @@
       </div>
     </section>
 
+    <nav class="mtabs" id="mtabs">
+      <button data-mtab="parts" class="on">零件<span class="n" id="mtabCount"></span></button>
+      <button data-mtab="info">概览 / 详情</button>
+    </nav>
     <aside class="right" id="rightPanel"></aside>
   </main>
 

@@ -319,24 +319,86 @@ svg { width: 18px; height: 18px; flex: none; }
   .crumbs { display: none; }
   .topbar { grid-template-columns: 1fr auto; }
 }
-@media (max-width: 960px) {
-  body { overflow: auto; grid-template-rows: auto auto auto; }
-  .topbar { padding: 10px 16px; }
-  .status .ver { display: none; }
-  .library { padding: 10px 16px; }
-  .workspace { grid-template-columns: 1fr; }
-  .stage { height: 72vh; order: 1; }
-  .left { order: 2; border-right: 0; max-height: none; }
-  .right { order: 3; border-left: 0; }
-  .stage-head { left: 16px; top: 16px; }
-  .stage-head h1 { font-size: 22px; }
-  .stage-tools { right: 16px; top: 16px; }
-  .stage-tools .pill { display: none; }
-  .modebar { bottom: 52px; max-width: calc(100% - 32px); overflow-x: auto; }
-  .modebar button { font-size: 13px; padding: 8px 10px; }
+.mtabs { display: none; }
+
+/* ---------- 手机 / 窄屏：3D 视图在上，下方「零件 / 详情」标签切换 ---------- */
+@media (max-width: 900px) {
+  html, body { height: auto; }
+  body { display: block; overflow-x: hidden; overflow-y: auto; -webkit-tap-highlight-color: transparent; }
+
+  .topbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; height: 52px; padding: 0 14px; }
+  .brand { gap: 8px; min-width: 0; }
+  .logo { width: 32px; height: 32px; border-radius: 8px; }
+  .logo svg { width: 18px; height: 18px; }
+  .brand-title { font-size: 15px; letter-spacing: .08em; white-space: nowrap; }
+  .brand-sub, .crumbs, .ver { display: none; }
+  .status { font-size: 12px; min-width: 0; gap: 6px; }
+  #aiStatus { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 48vw; }
+
+  .library { padding: 10px 14px; gap: 8px; }
+  .lib-upload { padding: 8px 12px; gap: 8px; border-radius: 9px; }
+  .lib-upload svg { width: 18px; height: 18px; }
+  .lib-upload b { font-size: 14px; white-space: nowrap; }
+  .lib-upload small { display: none; }
+  .lib-tabs { gap: 8px; scrollbar-width: none; }
+  .lib-tabs::-webkit-scrollbar { display: none; }
+  .lib-tab { width: 160px; padding: 7px 10px; gap: 8px; border-radius: 9px; }
+  .lib-tab .no { display: none; }
+  .lib-tab .thumb { width: 30px; height: 30px; }
+  .lib-tab b { font-size: 13px; max-width: 112px; }
+  .lib-tab small { font-size: 11px; max-width: 112px; }
+  .lib-tab .del { opacity: 1; }
+  .lib-import { padding: 0 12px; border-radius: 9px; font-size: 13px; }
+
+  .workspace { display: flex; flex-direction: column; }
+  .stage { order: 1; height: 62vh; height: 62svh; min-height: 400px; }
+  .mtabs {
+    order: 2; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+    position: sticky; top: 0; z-index: 6; padding: 10px 14px;
+    background: var(--bg-2); border-bottom: 1px solid var(--line);
+  }
+  .mtabs button { background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 9px; color: var(--text-2); font-size: 14px; }
+  .mtabs button.on { background: #173a37; border-color: var(--accent-2); color: var(--text); font-weight: 600; }
+  .mtabs .n { font-family: var(--mono); font-size: 12px; color: var(--text-3); margin-left: 4px; }
+  .left, .right { order: 3; border: 0; overflow: visible; padding: 14px 14px 40px; }
+  .workspace[data-mtab="parts"] .right, .workspace[data-mtab="info"] .left { display: none; }
+  .left .panel-head { display: none; }
+  .part { padding: 11px 8px; }
+  .part .eye { opacity: .6; }
+
+  .stage-head { left: 14px; top: 12px; right: 150px; max-width: none; }
+  .eyebrow { font-size: 10px; letter-spacing: .14em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .stage-head h1 { font-size: 19px; margin: 2px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .stage-head h1 em { font-size: 12px; margin-left: 4px; }
+  .stage-head .sub { display: none; }
+  .stage-tools { right: 12px; top: 12px; gap: 6px; }
+  .stage-tools .icon, .stage-tools .pill { width: 34px; height: 34px; border-radius: 8px; padding: 0; box-shadow: none; }
+  .stage-tools .pill { font-size: 0; gap: 0; }
+  .stage-tools svg { width: 16px; height: 16px; }
+
+  .float-ctl { left: 12px; right: 12px; top: 64px; overflow-x: auto; scrollbar-width: none; }
+  .float-ctl button { padding: 6px 10px; white-space: nowrap; flex: none; }
+  .float-ctl.range { padding: 6px 12px; gap: 10px; }
+  .float-ctl.range input { flex: 1; width: auto; min-width: 0; }
+
+  .modebar { left: 8px; right: 8px; bottom: 10px; transform: none; padding: 4px; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+  .modebar::-webkit-scrollbar { display: none; }
+  .modebar button { flex: 1 0 auto; justify-content: center; padding: 8px 10px; font-size: 13px; }
   .modebar button svg { display: none; }
-  .viewbar { left: 16px; bottom: 12px; }
-  .hint { display: none; }
-  .float-ctl { left: 16px; top: 110px; }
-  .step-ctl { bottom: 112px; min-width: 0; width: calc(100% - 32px); }
+  .viewbar, .hint, .tooltip { display: none; }
+  .step-ctl { left: 8px; right: 8px; bottom: 60px; transform: none; min-width: 0; padding: 6px 8px; }
+  .step-info b { font-size: 14px; }
+
+  .rp-head { margin-bottom: 14px; }
+  .rp-icon { width: 48px; height: 48px; border-radius: 12px; margin-bottom: 14px; }
+  .rp-icon svg { width: 24px; height: 24px; }
+  .rp-title { font-size: 22px; }
+  .rp-text { margin: 8px 0 14px; }
+
+  .dlg { max-height: calc(100vh - 24px); max-height: calc(100svh - 24px); overflow-y: auto; }
+  .dlg-body { padding: 16px; gap: 12px; }
+  .drop { min-height: 170px; }
+  .drop img { max-height: 240px; }
+  .loading .scan { width: 170px; height: 170px; }
+  .toast { bottom: 24px; }
 }
