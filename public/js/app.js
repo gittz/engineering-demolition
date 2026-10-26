@@ -4,6 +4,7 @@ import { RoomEnvironment } from 'three/addons/RoomEnvironment.js';
 import { buildShapeGeometry, makeMaterial, MATERIAL_LABEL, PALETTE } from './geometry.js';
 import { normalizeModel } from './normalize.js';
 import { SAMPLES } from './samples.js';
+import { prepareImage, formatBytes } from './compress.js';
 
 const $ = (id) => document.getElementById(id);
 const DEG = Math.PI / 180;
@@ -746,42 +747,26 @@ function loadItem(item) {
 const uploadDlg = $('uploadDlg');
 let pending = null;
 
-function readImage(file) {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('无法读取这张图片')); };
-    img.src = url;
-  });
-}
-function toJpeg(img, max, q) {
-  const s = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
-  const c = document.createElement('canvas');
-  c.width = Math.round(img.naturalWidth * s);
-  c.height = Math.round(img.naturalHeight * s);
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(0, 0, c.width, c.height);
-  ctx.drawImage(img, 0, 0, c.width, c.height);
-  return c.toDataURL('image/jpeg', q);
-}
-
 async function takeFile(file) {
   $('uploadError').hidden = true;
-  if (!file || !file.type.startsWith('image/')) { showUploadError('请选择图片文件'); return; }
+  $('compressInfo').hidden = false;
+  $('compressInfo').textContent = '正在压缩照片…';
   try {
-    const img = await readImage(file);
-    pending = {
-      image: toJpeg(img, 1568, 0.88),
-      photo: toJpeg(img, 900, 0.8),
-      thumb: toJpeg(img, 120, 0.7),
-    };
+    pending = await prepareImage(file);
+    const f = pending.info;
+    $('compressInfo').textContent = f.origBytes > f.bytes * 1.05 || f.origW !== f.w
+      ? `已压缩：${f.origW}×${f.origH} · ${formatBytes(f.origBytes)} → ${f.w}×${f.h} · ${formatBytes(f.bytes)}（在本机完成，原图不上传）`
+      : `照片：${f.w}×${f.h} · ${formatBytes(f.bytes)}`;
     $('previewImg').src = pending.photo;
     $('previewImg').hidden = false;
     $('dropEmpty').hidden = true;
     refreshUploadUI();
-  } catch (err) { showUploadError(err.message); }
+  } catch (err) {
+    pending = null;
+    $('compressInfo').hidden = true;
+    showUploadError(err.message);
+    refreshUploadUI();
+  }
 }
 function showUploadError(msg) { $('uploadError').textContent = msg; $('uploadError').hidden = false; }
 
@@ -827,14 +812,24 @@ function analyzeViaExt(job, hint, onProgress) {
   });
 }
 
+const NET_HINT = '网络连接中断。可能原因：① 网络不稳定（workers.dev 域名在国内访问常被中断，建议绑定自己的域名）；② 等待期间手机锁屏或切到了其它应用；③ 服务器出错（可在 Cloudflare 控制台查看 Worker 日志）。请保持页面在前台后重试。';
+
 async function analyzeViaServer(job, hint, code) {
-  const res = await fetch('/api/analyze', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-access-code': code },
-    body: JSON.stringify({ image: job.image, hint }),
-  });
-  // 线上（Cloudflare Worker）会先返回若干保活空格，再返回 JSON；出错时为 {"error": "..."}
-  const text = await res.text();
+  let res;
+  let text;
+  try {
+    res = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-access-code': code },
+      body: JSON.stringify({ image: job.image, hint }),
+    });
+    // 线上（Cloudflare Worker）会先返回若干保活空格，再返回 JSON；出错时为 {"error": "..."}
+    text = await res.text();
+  } catch (e) {
+    if (e instanceof TypeError) throw new Error(NET_HINT);
+    throw e;
+  }
+  if (!text.trim()) throw new Error(NET_HINT);
   let json;
   try { json = JSON.parse(text); } catch { throw new Error(`服务器返回异常 (${res.status})`); }
   if (!res.ok || json.error) {
@@ -977,6 +972,7 @@ function resetUploadForm() {
   $('dropEmpty').hidden = false;
   $('hintInput').value = '';
   $('fileInput').value = '';
+  $('compressInfo').hidden = true;
   refreshUploadUI();
 }
 

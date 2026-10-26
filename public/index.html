@@ -118,7 +118,7 @@
     <form method="dialog" class="dlg-body" id="uploadForm">
       <div class="dlg-head"><b>上传照片 · AI 拆解</b><button class="icon sm" value="cancel" formnovalidate>✕</button></div>
       <label class="drop" id="drop">
-        <input type="file" id="fileInput" accept="image/*" hidden />
+        <input type="file" id="fileInput" accept="image/*,.heic,.heif" hidden />
         <img id="previewImg" alt="" hidden />
         <div class="drop-empty" id="dropEmpty">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-8 8"/></svg>
@@ -126,6 +126,7 @@
           <small>建议：主体清晰、背景干净、能看出整体外形（JPG / PNG / WebP）</small>
         </div>
       </label>
+      <p class="dlg-note" id="compressInfo" hidden></p>
       <label class="field">
         <span>补充说明（可选）</span>
         <input id="hintInput" maxlength="200" placeholder="例如：这是一个 Zippo 煤油打火机 / 重点拆解传动部分" />
