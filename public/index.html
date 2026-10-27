@@ -58,6 +58,7 @@
 
       <div class="stage-tools">
         <button class="pill" id="photoBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-8 8"/></svg>实机照片</button>
+        <button class="icon" id="themeBtn" title="切换展示背景（浅色 / 深色）"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg></button>
         <button class="icon" id="resetBtn" title="重置视角"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 12a8 8 0 1 0 2.3-5.6L4 8.7M4 4v4.7h4.7"/></svg></button>
         <button class="icon" id="shotBtn" title="保存截图"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
         <button class="icon" id="fullBtn" title="全屏"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
@@ -74,6 +75,12 @@
         <input type="range" id="explodeRange" min="0.2" max="1.8" step="0.01" value="1" />
         <span id="explodeVal">100%</span>
       </div>
+      <div class="float-ctl range" id="motionCtl" hidden>
+        <button class="icon sm play on" id="motionPlay" type="button" title="播放 / 暂停">❚❚</button>
+        <label>转速</label>
+        <input type="range" id="motionSpeed" min="0.1" max="3" step="0.1" value="1" />
+        <span id="motionSpeedVal">1.0×</span>
+      </div>
       <div class="step-ctl" id="stepCtl" hidden>
         <button class="icon sm" id="stepPrev" title="上一步">‹</button>
         <div class="step-info"><small id="stepNum"></small><b id="stepName"></b></div>
@@ -89,7 +96,8 @@
         <button data-mode="explode"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="m12 3 9 4.5-9 4.5-9-4.5z"/><path d="m3 12 9 4.5 9-4.5M3 16.5 12 21l9-4.5"/></svg>爆炸拆解</button>
         <button data-mode="xray"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4M8 12h8"/></svg>内部透视</button>
         <button data-mode="wire"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><path d="M12 7v5M12 12l-6 5.5M12 12l6 5.5"/></svg>结构线框</button>
-        <button data-mode="step"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 5v14l11-7z"/></svg>逐件拆解</button>
+        <button data-mode="step"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h10M4 12h7M4 18h4M17 8l4 4-4 4"/></svg>逐件拆解</button>
+        <button data-mode="motion"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 3a9 9 0 1 1-8.5 6M3 4v5h5"/></svg>运动演示</button>
       </div>
 
       <div class="viewbar" id="viewbar">

@@ -1,9 +1,57 @@
 // 把 AI 输出的 shape 描述转换成 Three.js 几何体与材质
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/RoundedBoxGeometry.js';
+import { TEMPLATES } from './templates.js';
 
 const SEG = 48;
 const num = (v, d) => (Number.isFinite(+v) && +v > 0 ? +v : d);
+
+// ---------- 倒角：真实零件的边缘都有倒角/圆角，能在边上形成高光，质感差别很大 ----------
+// 倒角尺寸取最小边的 6%，上限 1.2mm
+const bevelOf = (...dims) => Math.min(Math.min(...dims) * 0.06, 1.2);
+const V2 = (pts) => pts.map(([x, y]) => new THREE.Vector2(x, y));
+
+// 带倒角的圆柱/圆台（回转体轮廓，自下而上，法线朝外）
+function chamferedCylinder(rt, rb, h, seg = SEG) {
+  const hh = h / 2;
+  const c = Math.min(bevelOf(rt * 2, rb * 2, h), Math.min(rt, rb) * 0.3);
+  if (c < 0.02 || Math.min(rt, rb) < 0.15) return new THREE.CylinderGeometry(rt, rb, h, seg);
+  const e = c * 0.12; // 额外的过渡点，让平面与倒角面的法线分界更清晰
+  return new THREE.LatheGeometry(V2([
+    [0, -hh], [rb - c - e, -hh], [rb - c, -hh], [rb, -hh + c], [rb, -hh + c + e],
+    [rt, hh - c - e], [rt, hh - c], [rt - c, hh], [rt - c - e, hh], [0, hh],
+  ]), seg);
+}
+
+// 带外圆倒角的空心管
+function chamferedTube(ro, ri, h, seg = SEG) {
+  const hh = h / 2;
+  const c = Math.min(bevelOf(ro - ri, h), (ro - ri) * 0.35);
+  if (c < 0.02) {
+    return new THREE.LatheGeometry(V2([[ri, -hh], [ro, -hh], [ro, hh], [ri, hh], [ri, -hh]]), seg);
+  }
+  const e = c * 0.12;
+  return new THREE.LatheGeometry(V2([
+    [ri, -hh], [ro - c - e, -hh], [ro - c, -hh], [ro, -hh + c], [ro, -hh + c + e],
+    [ro, hh - c - e], [ro, hh - c], [ro - c, hh], [ro - c - e, hh], [ri, hh], [ri, -hh],
+  ]), seg);
+}
+
+// 拉伸体统一加小倒角（bevelOffset 为负，保证外轮廓尺寸不变）
+function bevelExtrude(shape, t, sizeHint) {
+  const bt = Math.min(t * 0.12, 0.6, sizeHint * 0.15);
+  if (bt < 0.02) {
+    const g = new THREE.ExtrudeGeometry(shape, { depth: t, bevelEnabled: false, curveSegments: 24 });
+    g.translate(0, 0, -t / 2);
+    return g;
+  }
+  const depth = Math.max(t - 2 * bt, t * 0.2);
+  const g = new THREE.ExtrudeGeometry(shape, {
+    depth, bevelEnabled: true, bevelThickness: bt, bevelSize: bt, bevelOffset: -bt, bevelSegments: 2, curveSegments: 24,
+  });
+  g.translate(0, 0, -depth / 2);
+  return g;
+}
 
 class HelixCurve extends THREE.Curve {
   constructor(radius, turns, height) {
@@ -42,6 +90,8 @@ function gearShape(R, teeth, depth, inner) {
 
 export function buildShapeGeometry(s) {
   const p = s.params || {};
+  // 零件模板（螺栓、轴承、曲轴等），已自带法线，直接返回
+  if (TEMPLATES[s.type]) return TEMPLATES[s.type](p);
   let g;
   switch (s.type) {
     case 'roundedBox': {
@@ -52,16 +102,14 @@ export function buildShapeGeometry(s) {
     }
     case 'cylinder': {
       const r = num(p.radius, 5);
-      g = new THREE.CylinderGeometry(num(p.radiusTop, r), num(p.radiusBottom, r), num(p.height, 10), SEG);
+      g = chamferedCylinder(num(p.radiusTop, r), num(p.radiusBottom, r), num(p.height, 10));
       break;
     }
     case 'tube': {
       const ro = num(p.outerRadius ?? p.radius, 5);
       let ri = num(p.innerRadius, ro * 0.7);
       if (ri >= ro) ri = ro * 0.85;
-      const h = num(p.height, 5) / 2;
-      const pts = [[ri, -h], [ro, -h], [ro, h], [ri, h], [ri, -h]].map(([x, y]) => new THREE.Vector2(x, y));
-      g = new THREE.LatheGeometry(pts, SEG);
+      g = chamferedTube(ro, ri, num(p.height, 5));
       break;
     }
     case 'cone':
@@ -85,11 +133,9 @@ export function buildShapeGeometry(s) {
     }
     case 'gear': {
       const t = num(p.thickness ?? p.height, 3);
-      g = new THREE.ExtrudeGeometry(
-        gearShape(num(p.radius, 5), num(p.teeth, 16), num(p.toothDepth, num(p.radius, 5) * 0.12), +p.innerRadius || 0),
-        { depth: t, bevelEnabled: false, curveSegments: 24 },
-      );
-      g.translate(0, 0, -t / 2);
+      const R = num(p.radius, 5);
+      const td = num(p.toothDepth, R * 0.12);
+      g = bevelExtrude(gearShape(R, num(p.teeth, 16), td, +p.innerRadius || 0), t, td);
       g.rotateX(-Math.PI / 2);
       break;
     }
@@ -106,43 +152,47 @@ export function buildShapeGeometry(s) {
       const t = num(p.thickness ?? p.depth, 2);
       if (pts.length >= 3) {
         const shape = new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(+x, +y)));
-        g = new THREE.ExtrudeGeometry(shape, { depth: t, bevelEnabled: false });
-        g.translate(0, 0, -t / 2);
+        const xs = pts.map((q) => +q[0]);
+        const ys = pts.map((q) => +q[1]);
+        g = bevelExtrude(shape, t, Math.min(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)));
       } else {
         g = new THREE.BoxGeometry(10, 10, t);
       }
       break;
     }
     case 'box':
-    default:
-      g = new THREE.BoxGeometry(num(p.width, 10), num(p.height, 10), num(p.depth, 10));
+    default: {
+      const w = num(p.width, 10), h = num(p.height, 10), d = num(p.depth, 10);
+      const r = bevelOf(w, h, d);
+      g = r >= 0.02 ? new RoundedBoxGeometry(w, h, d, 2, r) : new THREE.BoxGeometry(w, h, d);
+    }
   }
   g.computeVertexNormals();
   return g;
 }
 
-// ---------- 材质 ----------
+// ---------- 材质（物理材质：金属反射环境、塑料/陶瓷带清漆层、透明件带高光） ----------
 const MAT = {
-  steel: { color: '#9aa3ab', metalness: 0.85, roughness: 0.32 },
-  stainless: { color: '#c3c9ce', metalness: 0.9, roughness: 0.22 },
-  aluminum: { color: '#c8cdd2', metalness: 0.75, roughness: 0.35 },
-  brass: { color: '#c9a24a', metalness: 0.9, roughness: 0.28 },
-  copper: { color: '#c06a3d', metalness: 0.9, roughness: 0.3 },
-  chrome: { color: '#e2e6e9', metalness: 1.0, roughness: 0.08 },
-  iron: { color: '#5c6166', metalness: 0.7, roughness: 0.6 },
-  plastic: { color: '#3a4047', metalness: 0.0, roughness: 0.45 },
-  transparent_plastic: { color: '#9fd4ff', metalness: 0.0, roughness: 0.12, opacity: 0.45 },
-  rubber: { color: '#26292c', metalness: 0.0, roughness: 0.92 },
-  glass: { color: '#d6ecf5', metalness: 0.0, roughness: 0.05, opacity: 0.28 },
-  liquid: { color: '#bfe3ff', metalness: 0.0, roughness: 0.1, opacity: 0.55 },
-  fiber: { color: '#e5dcc5', metalness: 0.0, roughness: 0.95 },
-  ceramic: { color: '#eeeae2', metalness: 0.0, roughness: 0.35 },
-  wood: { color: '#a77b4f', metalness: 0.0, roughness: 0.8 },
-  pcb: { color: '#1f6b3a', metalness: 0.15, roughness: 0.55 },
-  magnet: { color: '#4b5056', metalness: 0.6, roughness: 0.45 },
-  fabric: { color: '#7a7f86', metalness: 0.0, roughness: 1.0 },
-  paper: { color: '#f2efe6', metalness: 0.0, roughness: 0.9 },
-  foam: { color: '#d9d2c3', metalness: 0.0, roughness: 1.0 },
+  steel: { color: '#9aa3ab', metalness: 1, roughness: 0.34 },
+  stainless: { color: '#c3c9ce', metalness: 1, roughness: 0.2 },
+  aluminum: { color: '#cdd2d7', metalness: 1, roughness: 0.3 },
+  brass: { color: '#c9a24a', metalness: 1, roughness: 0.24 },
+  copper: { color: '#c06a3d', metalness: 1, roughness: 0.26 },
+  chrome: { color: '#e6eaed', metalness: 1, roughness: 0.06 },
+  iron: { color: '#5c6166', metalness: 0.85, roughness: 0.55 },
+  plastic: { color: '#3a4047', metalness: 0, roughness: 0.42, clearcoat: 0.3, clearcoatRoughness: 0.35 },
+  transparent_plastic: { color: '#9fd4ff', metalness: 0, roughness: 0.06, opacity: 0.52, clearcoat: 1, clearcoatRoughness: 0.05 },
+  rubber: { color: '#26292c', metalness: 0, roughness: 0.88 },
+  glass: { color: '#d6ecf5', metalness: 0, roughness: 0.02, opacity: 0.25, clearcoat: 1, clearcoatRoughness: 0.02 },
+  liquid: { color: '#bfe3ff', metalness: 0, roughness: 0.05, opacity: 0.5, clearcoat: 0.8, clearcoatRoughness: 0.05 },
+  fiber: { color: '#e5dcc5', metalness: 0, roughness: 0.95 },
+  ceramic: { color: '#eeeae2', metalness: 0, roughness: 0.3, clearcoat: 0.6, clearcoatRoughness: 0.2 },
+  wood: { color: '#a77b4f', metalness: 0, roughness: 0.75, clearcoat: 0.15 },
+  pcb: { color: '#1f6b3a', metalness: 0.1, roughness: 0.5, clearcoat: 0.5, clearcoatRoughness: 0.3 },
+  magnet: { color: '#4b5056', metalness: 0.7, roughness: 0.42 },
+  fabric: { color: '#7a7f86', metalness: 0, roughness: 1, sheen: 0.6, sheenRoughness: 0.8 },
+  paper: { color: '#f2efe6', metalness: 0, roughness: 0.9 },
+  foam: { color: '#d9d2c3', metalness: 0, roughness: 1 },
 };
 
 export const MATERIAL_LABEL = {
@@ -158,10 +208,15 @@ export function materialSpec(kind) {
 
 export function makeMaterial(kind, color) {
   const spec = materialSpec(kind);
-  const m = new THREE.MeshStandardMaterial({
+  const m = new THREE.MeshPhysicalMaterial({
     color: new THREE.Color(color || spec.color),
     metalness: spec.metalness,
     roughness: spec.roughness,
+    clearcoat: spec.clearcoat || 0,
+    clearcoatRoughness: spec.clearcoatRoughness ?? 0.3,
+    sheen: spec.sheen || 0,
+    sheenRoughness: spec.sheenRoughness ?? 1,
+    specularIntensity: 1,
     envMapIntensity: 1.0,
   });
   m.userData.baseOpacity = spec.opacity ?? 1;

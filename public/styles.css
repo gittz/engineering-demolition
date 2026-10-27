@@ -181,6 +181,8 @@ svg { width: 18px; height: 18px; flex: none; }
 .float-ctl.range input { width: 180px; accent-color: var(--accent); }
 .float-ctl.range span { font-family: var(--mono); width: 42px; text-align: right; }
 
+#motionCtl .icon.sm { width: 30px; height: 30px; font-size: 13px; background: #1e2f3b; color: #e6edf2; border-color: #2a3a46; }
+#motionCtl .icon.sm.on { background: var(--accent-2); }
 .step-ctl {
   position: absolute; left: 50%; transform: translateX(-50%); bottom: 156px;
   display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px;
@@ -231,6 +233,20 @@ svg { width: 18px; height: 18px; flex: none; }
 }
 .scan::after { content: ""; position: absolute; inset: 0; background-image: linear-gradient(rgba(63,193,166,.18) 1px, transparent 1px), linear-gradient(90deg, rgba(63,193,166,.18) 1px, transparent 1px); background-size: 24px 24px; }
 @keyframes scan { to { top: 100%; } }
+
+/* ---------- 深色展厅背景时，3D 视图上的文字改为浅色 ---------- */
+.stage[data-theme="dark"] { color: #dfe7ec; }
+.stage[data-theme="dark"] .eyebrow { color: #8ea0ad; }
+.stage[data-theme="dark"] .stage-head h1 { color: #f1f5f8; }
+.stage[data-theme="dark"] .stage-head h1 em { color: #8ea0ad; }
+.stage[data-theme="dark"] .stage-head .sub { color: #a9b8c3; }
+.stage[data-theme="dark"] .viewbar { color: #8ea0ad; }
+.stage[data-theme="dark"] .viewbar button { background: #1c2833; color: #c8d3db; }
+.stage[data-theme="dark"] .viewbar button:hover { background: #253542; }
+.stage[data-theme="dark"] .hint { color: #7d8f9c; }
+.stage[data-theme="dark"] .loading { background: rgba(10, 16, 22, .88); color: #e6edf2; }
+.stage[data-theme="dark"] .loading small { color: #8ea0ad; }
+.stage[data-theme="dark"] .pill, .stage[data-theme="dark"] .icon { border-color: #33485a; }
 
 /* ---------- right panel ---------- */
 .rp-head { display: flex; justify-content: space-between; align-items: center; font-weight: 700; font-size: 16px; margin-bottom: 22px; }
@@ -420,7 +436,7 @@ svg { width: 18px; height: 18px; flex: none; }
   .right .rp-actions .btn { flex: 1; padding: 8px 10px; }
 
   /* 3D 视图上的浮层（视图变矮时也要放得下） */
-  .stage-head { left: 12px; top: 10px; right: 150px; max-width: none; }
+  .stage-head { left: 12px; top: 10px; right: 196px; max-width: none; }
   .eyebrow { font-size: 10px; letter-spacing: .14em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .stage-head h1 { font-size: 18px; margin: 2px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .stage-head h1 em { font-size: 12px; margin-left: 4px; }

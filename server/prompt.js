@@ -4,7 +4,12 @@
 export const SHAPE_TYPES = [
   'box', 'roundedBox', 'cylinder', 'tube', 'cone', 'sphere', 'torus',
   'capsule', 'spring', 'gear', 'lathe', 'extrude',
+  // 零件模板
+  'bolt', 'nut', 'bearing', 'valvePlate', 'flange', 'pulley', 'finnedCylinder',
+  'crankshaft', 'piston', 'conrod', 'threadedRod',
 ];
+
+export const MOTION_TYPES = ['rotate', 'swing', 'oscillate', 'slider', 'conrod'];
 
 export const MATERIALS = [
   'steel', 'stainless', 'aluminum', 'brass', 'copper', 'chrome', 'iron',
@@ -42,6 +47,28 @@ const shapeSchema = {
         teeth: { type: 'number' },
         toothDepth: { type: 'number' },
         thickness: { type: 'number' },
+        diameter: { type: 'number' },
+        size: { type: 'number' },
+        headHeight: { type: 'number' },
+        headSize: { type: 'number' },
+        rings: { type: 'number' },
+        holes: { type: 'number' },
+        holeRadius: { type: 'number' },
+        holeCircle: { type: 'number' },
+        grooves: { type: 'number' },
+        fins: { type: 'number' },
+        finRadius: { type: 'number' },
+        finThickness: { type: 'number' },
+        throw: { type: 'number' },
+        throws: { type: 'number' },
+        journalRadius: { type: 'number' },
+        pinRadius: { type: 'number' },
+        pinLength: { type: 'number' },
+        webThickness: { type: 'number' },
+        webWidth: { type: 'number' },
+        bigRadius: { type: 'number' },
+        smallRadius: { type: 'number' },
+        pitch: { type: 'number' },
         points: {
           type: 'array',
           items: { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 2 },
@@ -50,8 +77,37 @@ const shapeSchema = {
     },
     position: vec3,
     rotation: vec3,
+    array: {
+      type: 'object',
+      description: '阵列：把这个 shape 复制成一圈（给 radius）或一排（给 spacing）',
+      properties: {
+        count: { type: 'integer' },
+        radius: { type: 'number', description: '圆周阵列半径，圆心为本 shape 的 position' },
+        axis: { type: 'string', enum: ['x', 'y', 'z'], description: '圆周阵列绕哪根轴（局部坐标）' },
+        startAngle: { type: 'number' },
+        spacing: { ...vec3, description: '线性阵列相邻间距 [dx,dy,dz]' },
+      },
+      required: ['count'],
+    },
   },
   required: ['type', 'params'],
+};
+
+const motionSchema = {
+  type: 'object',
+  description: '运动演示时该零件如何运动（只给会动的零件）',
+  properties: {
+    type: { type: 'string', enum: MOTION_TYPES },
+    axis: { ...vec3, description: '转动/摆动轴，或平移方向（装配坐标系单位向量）' },
+    crankAxis: { ...vec3, description: 'conrod 专用：曲轴轴线方向' },
+    speed: { type: 'number', description: '相对主轴的转速比，默认 1；减速齿轮可填 0.5 等，反转为负数' },
+    amplitude: { type: 'number', description: 'swing 为摆角（度），oscillate 为行程的一半（mm）' },
+    phase: { type: 'number', description: '相位（度）' },
+    pivot: { ...vec3, description: '转动中心相对零件原点的偏移（mm），默认零件原点' },
+    crankRadius: { type: 'number', description: 'slider/conrod：曲柄半径（= 行程/2）' },
+    rodLength: { type: 'number', description: 'slider/conrod：连杆中心距' },
+  },
+  required: ['type', 'axis'],
 };
 
 export const TEARDOWN_SCHEMA = {
@@ -96,6 +152,7 @@ export const TEARDOWN_SCHEMA = {
           rotation: { ...vec3, description: '零件整体欧拉角（度，XYZ 顺序）' },
           explode: { ...vec3, description: '完全爆炸时相对装配位置的位移，mm' },
           shapes: { type: 'array', minItems: 1, maxItems: 12, items: shapeSchema },
+          motion: motionSchema,
         },
         required: ['id', 'name', 'group', 'material', 'color', 'position', 'explode', 'shapes', 'order', 'function'],
       },
@@ -131,6 +188,31 @@ export const SYSTEM_PROMPT = `你是一名资深机械/产品结构工程师，�
 - lathe（回转体：喷嘴、瓶身、旋钮、笔尖、灯泡等）: points=[[r,y],...] 绕 Y 轴旋转的轮廓，r≥0；空心件按"外轮廓上行 + 内轮廓下行"描点
 - extrude（异形板件：支架、杠杆、拨片、卡扣）: points=[[x,y],...] 局部 XY 平面多边形，thickness 为沿 Z 的厚度（居中）
 需要轴线沿 X 时把 rotation 设为 [0,0,90]，沿 Z 时设为 [90,0,0]。复杂零件请用多个 shape 组合近似外形，宁可多用几个 shape 也要像。
+
+## 零件模板（优先使用！细节远比基础形状丰富）
+遇到下列常见机械零件时，必须使用对应模板，只需填参数（mm）：
+- bolt（六角螺栓）: diameter, length, headHeight?, headSize? —— 原点在螺栓头下表面中心，头朝 +Y，螺杆沿 -Y
+- nut（六角螺母）: diameter, thickness, size?(对边宽) —— 轴线 Y
+- bearing（滚动轴承）: outerRadius, innerRadius, width —— 轴线 Y，含内外圈和滚珠
+- valvePlate（环状阀片/带槽圆盘，压缩机气阀、过滤盘）: radius, thickness, rings?(槽环数), innerRadius?
+- flange（法兰/端盖/带螺栓孔的圆盘）: radius, thickness, innerRadius?, holes(孔数), holeRadius?, holeCircle?(孔分布圆半径)
+- pulley（皮带轮/飞轮/V 带轮）: radius, width, grooves?(槽数), innerRadius?
+- finnedCylinder（带散热片的气缸/电机外壳）: radius(芯筒), length, fins(片数), finRadius(散热片外径), innerRadius?(内孔)
+- crankshaft（曲轴）: length, journalRadius, throw(曲柄半径=行程/2), throws?(拐数), pinRadius?, webThickness? —— 主轴沿局部 Y，第 1 个曲柄销在局部 +X 方向，多拐按 360°/拐数 错开
+- piston（活塞）: radius, height, rings?(环槽数) —— 原点在活塞中心，顶面朝 +Y
+- conrod（连杆）: length(中心距), bigRadius, smallRadius, thickness —— 原点在小头孔中心，大头在 -Y 方向 length 处，两孔轴线沿局部 Z
+- threadedRod（螺杆/丝杠/双头螺柱）: diameter, length, pitch?
+螺栓、螺母、散热片这类重复件用 array 阵列一次写完，例如 4 个缸盖螺栓：{"type":"bolt", "params":{...}, "position":[0,120,0], "array":{"count":4,"radius":42,"axis":"y","startAngle":45}}。
+
+## 运动（motion，强烈建议为会动的零件填写）
+运动演示时，所有零件跟随同一个"主轴转角" θ 运动。只给会动的零件写 motion，静止件不写：
+- rotate：绕 axis 连续转动，如曲轴、飞轮、齿轮、风扇、电机转子（齿轮副用 speed 表示传动比，反向用负数）
+- swing：绕 axis 往复摆动，amplitude 为摆角（度），如摇臂、拨叉
+- oscillate：沿 axis 往复平移，amplitude 为单边行程（mm），如按钮、阀芯
+- slider：曲柄滑块（活塞、十字头），沿 axis（指向远离曲轴的方向）往复，需 crankRadius、rodLength
+- conrod：连杆，需 axis（同活塞）、crankAxis（曲轴轴线）、crankRadius、rodLength；连杆原点必须在小头（活塞销）处
+曲柄连杆机构的约定：θ=0 时曲柄销指向活塞（上止点），装配位置请按上止点摆放；曲轴用 rotate 且 axis = crankAxis；多缸机用 phase 区分各缸（如 0、180）。
+pivot 为转动中心相对零件原点的偏移；转动件尽量把零件原点放在转轴上。
 
 ## 外壳与爆炸
 - is_shell=true 仅用于遮挡内部的外壳、外罩、盖板、机壳、壳体；"内部透视/剖视"会把它们变透明或剖开。

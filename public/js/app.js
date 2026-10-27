@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/OrbitControls.js';
-import { RoomEnvironment } from 'three/addons/RoomEnvironment.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { buildShapeGeometry, makeMaterial, MATERIAL_LABEL, PALETTE } from './geometry.js';
 import { normalizeModel } from './normalize.js';
 import { SAMPLES } from './samples.js';
@@ -21,6 +24,7 @@ const store = {
 const HISTORY_KEY = 'teardown.history.v1';
 const LAST_KEY = 'teardown.last.v1';
 const CODE_KEY = 'teardown.code.v1';
+const THEME_KEY = 'teardown.theme.v1';
 let history = store.get(HISTORY_KEY, []);
 
 function saveHistory() {
@@ -49,14 +53,21 @@ const state = {
   playTimer: null,
   view: 'iso',
   aiEnabled: false,
+  motionTime: 0,
+  motionPlaying: true,
+  motionSpeed: 1,
 };
+
+let dirty = true; // 按需渲染标记（见 tick）
+function invalidate() { dirty = true; }
 
 // ---------------- Three.js 场景 ----------------
 const viewport = $('viewport');
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
+// Neutral 色调映射：保留材质本色和纯白背景（ACES 会让白色发灰、颜色变淡）
+renderer.toneMapping = THREE.NeutralToneMapping;
 renderer.toneMappingExposure = 1.05;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -64,8 +75,42 @@ renderer.localClippingEnabled = true;
 viewport.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
+// 摄影棚环境光：渐变穹顶 + 几块柔光箱（顶光、左右条形灯、背光）。
+// 金属件会映出干净的光带，透明件只有柔和的高光，不会映出杂物。
+function studioEnvironment() {
+  const env = new THREE.Scene();
+  const dome = new THREE.SphereGeometry(60, 48, 24);
+  const pos = dome.attributes.position;
+  const cols = [];
+  const top = new THREE.Color(0.62, 0.66, 0.72);
+  const mid = new THREE.Color(0.32, 0.35, 0.39);
+  const bot = new THREE.Color(0.06, 0.07, 0.08);
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i) / 60;
+    const c = y > 0 ? mid.clone().lerp(top, y) : mid.clone().lerp(bot, Math.min(1, -y * 1.6));
+    cols.push(c.r, c.g, c.b);
+  }
+  dome.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+  env.add(new THREE.Mesh(dome, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
+  const softbox = (w, h, power, x, y, z) => {
+    const m = new THREE.Mesh(
+      new THREE.PlaneGeometry(w, h),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(power, power, power), side: THREE.DoubleSide }),
+    );
+    m.position.set(x, y, z);
+    m.lookAt(0, 0, 0);
+    env.add(m);
+  };
+  softbox(36, 14, 5, 0, 40, 6);     // 顶部大柔光箱
+  softbox(8, 34, 3.2, -38, 8, 14);  // 左侧条形灯
+  softbox(8, 34, 2.4, 38, 8, 10);   // 右侧条形灯
+  softbox(30, 10, 1.6, 0, 12, -40); // 背光
+  const tex = pmrem.fromScene(env, 0.02).texture;
+  env.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
+  return tex;
+}
 const pmrem = new THREE.PMREMGenerator(renderer);
-scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environment = studioEnvironment();
 
 const camera = new THREE.PerspectiveCamera(30, 1, 0.05, 500);
 camera.position.set(16, 11, 18);
@@ -75,7 +120,8 @@ controls.dampingFactor = 0.08;
 controls.minDistance = 1.5;
 controls.maxDistance = 90;
 
-scene.add(new THREE.HemisphereLight(0xffffff, 0xb9c3cb, 0.55));
+const hemi = new THREE.HemisphereLight(0xffffff, 0xb9c3cb, 0.55);
+scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xffffff, 1.5);
 sun.position.set(8, 18, 10);
 sun.castShadow = true;
@@ -87,6 +133,10 @@ scene.add(sun);
 const fill = new THREE.DirectionalLight(0xdfe9ff, 0.45);
 fill.position.set(-12, 6, -8);
 scene.add(fill);
+// 轮廓光（深色背景时从背后勾出零件边缘）
+const rim = new THREE.DirectionalLight(0xa8dcff, 0);
+rim.position.set(-6, 9, -16);
+scene.add(rim);
 
 const grid = new THREE.GridHelper(60, 120, 0xc0c8ce, 0xd8dee2);
 grid.material.transparent = true;
@@ -101,12 +151,115 @@ const modelRoot = new THREE.Group();
 scene.add(modelRoot);
 const sectionPlane = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0); // 剖掉 z>0 的前半部分
 
+// ---------------- 后期处理：环境光遮蔽（GTAO）----------------
+// 让零件之间的缝隙、贴合处自然变暗，立体感明显提升。手机等触屏设备关闭以保证流畅。
+class SolidGTAOPass extends GTAOPass {
+  overrideVisibility() {
+    super.overrideVisibility();
+    // 透明/半透明件不参与遮蔽计算，否则透明外壳会在内部零件上投下"脏"的阴影
+    this.scene.traverse((o) => {
+      if (o.isMesh && o.visible && (o.material?.transparent || o.material?.isShadowMaterial)) o.visible = false;
+    });
+  }
+  // 计算法线/深度时不能画背景图，否则背景会被当成"表面"参与遮蔽计算，产生灰雾和色块
+  renderOverride(renderer, overrideMaterial, renderTarget, clearColor, clearAlpha) {
+    const bg = this.scene.background;
+    this.scene.background = null;
+    super.renderOverride(renderer, overrideMaterial, renderTarget, clearColor, clearAlpha);
+    this.scene.background = bg;
+  }
+}
+// 地址栏加 ?ao=0 可强制关闭（显卡较弱时），?ao=1 可在触屏设备上强制开启
+const AO_PARAM = new URLSearchParams(location.search).get('ao');
+const AO_SUPPORTED = AO_PARAM ? AO_PARAM !== '0' : !window.matchMedia('(pointer: coarse)').matches;
+let composer = null;
+let gtao = null;
+if (AO_SUPPORTED) {
+  try {
+    const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
+    composer = new EffectComposer(renderer, rt);
+    composer.addPass(new RenderPass(scene, camera));
+    gtao = new SolidGTAOPass(scene, camera, 1, 1);
+    gtao.blendIntensity = 0.85;
+    gtao.updateGtaoMaterial({ radius: 0.7, distanceExponent: 2, thickness: 2, scale: 1.2, samples: 16 });
+    gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 16 });
+    composer.addPass(gtao);
+    composer.addPass(new OutputPass());
+  } catch (err) {
+    console.warn('AO 不可用，已回退普通渲染', err);
+    composer = null;
+    gtao = null;
+  }
+}
+function renderFrame() {
+  if (composer && gtao?.enabled) composer.render();
+  else renderer.render(scene, camera);
+}
+
+// ---------------- 展示背景：浅色工作室 / 深色展厅 ----------------
+function gradientTexture(inner, outer) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 512;
+  const g = c.getContext('2d');
+  const grd = g.createRadialGradient(256, 190, 20, 256, 256, 420);
+  grd.addColorStop(0, inner);
+  grd.addColorStop(1, outer);
+  g.fillStyle = grd;
+  g.fillRect(0, 0, 512, 512);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const THEMES = {
+  light: {
+    bg: gradientTexture('#fbfcfd', '#dfe5e9'), grid: [0xc0c8ce, 0xd8dee2], gridOpacity: 0.75, shadow: 0.13,
+    hemi: [0xffffff, 0xb9c3cb, 0.5], sun: 1.4, fill: 0.4, rim: 0, env: 0.9, exposure: 1.0,
+  },
+  dark: {
+    bg: gradientTexture('#24313d', '#090e13'), grid: [0x34434f, 0x1c2630], gridOpacity: 0.9, shadow: 0.42,
+    hemi: [0xcfe3ff, 0x111820, 0.3], sun: 1.6, fill: 0.3, rim: 1.4, env: 0.8, exposure: 1.0,
+  },
+};
+function applyTheme(name) {
+  const t = THEMES[name] || THEMES.light;
+  state.theme = THEMES[name] ? name : 'light';
+  scene.background = t.bg;
+  // GridHelper 每条刻度 4 个顶点（两条线），中心那组用主色
+  const colors = grid.geometry.attributes.color;
+  const c1 = new THREE.Color(t.grid[0]);
+  const c2 = new THREE.Color(t.grid[1]);
+  const centerIdx = colors.count / 8;
+  for (let k = 0; k < colors.count; k++) {
+    const c = Math.floor(k / 4) === Math.floor(centerIdx) ? c1 : c2;
+    colors.setXYZ(k, c.r, c.g, c.b);
+  }
+  colors.needsUpdate = true;
+  grid.material.opacity = t.gridOpacity;
+  shadowPlane.material.opacity = t.shadow;
+  hemi.color.setHex(t.hemi[0]);
+  hemi.groundColor.setHex(t.hemi[1]);
+  hemi.intensity = t.hemi[2];
+  sun.intensity = t.sun;
+  fill.intensity = t.fill;
+  rim.intensity = t.rim;
+  scene.environmentIntensity = t.env;
+  renderer.toneMappingExposure = t.exposure;
+  $('stage').dataset.theme = state.theme;
+  store.set(THEME_KEY, state.theme);
+  dirty = true;
+}
+
 function resize() {
   const w = viewport.clientWidth, h = viewport.clientHeight;
   if (!w || !h) return;
   renderer.setSize(w, h, false);
+  if (composer) {
+    composer.setPixelRatio(renderer.getPixelRatio());
+    composer.setSize(w, h);
+  }
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
+  invalidate();
 }
 new ResizeObserver(resize).observe(viewport);
 resize();
@@ -136,6 +289,8 @@ function buildModel(model) {
       matColor: mat.color.clone(),
       baseOpacity: mat.userData.baseOpacity,
       basePos: g.position.clone(),
+      baseQuat: g.quaternion.clone(),
+      motion: p.motion || null,
       explodeVec: new THREE.Vector3(),
       t: 0, tTarget: 0, hidden: false,
       wireMat: new THREE.MeshBasicMaterial({ color: mat.color.clone(), transparent: true, opacity: 0.07, depthWrite: false, side: THREE.DoubleSide }),
@@ -199,9 +354,11 @@ function updateFloor(instant = false) {
   let min = Infinity;
   for (const e of state.entries) min = Math.min(min, e.boxMM.min.y + e.explodeVec.y * e.tTarget * state.explodeAmount);
   const target = (min - state.centerY) * state.scale - 0.08;
-  floorY = instant ? target : floorY + (target - floorY) * 0.12;
+  const prev = floorY;
+  floorY = instant || Math.abs(target - floorY) < 1e-4 ? target : floorY + (target - floorY) * 0.12;
   grid.position.y = floorY;
   shadowPlane.position.y = floorY - 0.001;
+  return floorY !== prev;
 }
 
 function ensureEdges(e) {
@@ -234,17 +391,19 @@ function refreshVisuals() {
     const color = colorMode === 'group' ? e.groupColor : e.matColor;
     let opacity = e.baseOpacity;
     let clip = null;
+    // 运动演示时外壳自动变透明，方便看清内部零件的运动
+    if (mode === 'motion' && shell) opacity = Math.min(opacity, 0.13);
     if (mode === 'xray' && shell) {
       if (xray === 'transparent') opacity = Math.min(opacity, 0.13);
       if (xray === 'section') clip = [sectionPlane];
     }
     let glow = 0;
     if (focus) {
-      if (e === focus) glow = 0.32;
+      if (e === focus) glow = 0.22;
       else if (mode === 'step') { if (e.part.order < state.step) opacity = Math.min(opacity, 0.35); }
       else opacity = Math.min(opacity, 0.12);
     }
-    if (e === state.hovered && e !== focus) glow = Math.max(glow, 0.16);
+    if (e === state.hovered && e !== focus) glow = Math.max(glow, 0.12);
 
     const m = e.mat;
     m.color.copy(color);
@@ -258,11 +417,13 @@ function refreshVisuals() {
     m.needsUpdate = true;
 
     // 线框
-    const showEdges = wire || (mode === 'xray' && shell && xray !== 'solid');
+    // 选中件：保留真实材质，只加一点青色辉光（其余零件半透明淡出）
+    const showEdges = wire || ((mode === 'xray' && xray !== 'solid') || mode === 'motion') && shell;
     if (showEdges) ensureEdges(e);
     e.wireMat.color.copy(e === focus ? new THREE.Color(ACCENT) : color);
     e.wireMat.opacity = e === focus ? 0.3 : (focus ? 0.02 : 0.045);
-    e.lineMat.color.setHex(e === focus ? ACCENT : (wire ? 0x22313c : 0x7d8b95));
+    const dark = state.theme === 'dark';
+    e.lineMat.color.setHex(e === focus ? ACCENT : (wire ? (dark ? 0x9fb3c2 : 0x22313c) : 0x7d8b95));
     e.lineMat.opacity = wire ? (focus && e !== focus ? 0.12 : 0.9) : 0.35;
     e.lineMat.clippingPlanes = clip;
     for (const l of e.edges) l.visible = showEdges;
@@ -271,6 +432,9 @@ function refreshVisuals() {
       mesh.castShadow = !wire && opacity > 0.5;
     }
   }
+  // 线框、剖视模式下关闭环境光遮蔽（这两种模式里遮蔽会产生错误的暗斑）
+  if (gtao) gtao.enabled = !wire && !(mode === 'xray' && xray === 'section');
+  invalidate();
 }
 
 // ---------------- 相机 ----------------
@@ -346,15 +510,83 @@ function focusEntry(e) {
 // ---------------- 渲染循环 ----------------
 const clock = new THREE.Clock();
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+// ---------------- 运动演示 ----------------
+// 所有运动共用一个"主轴转角" θ（模拟曲轴/电机转动），各零件按自己的运动类型跟随：
+//  rotate   绕 axis 连续转动（转角 = θ·speed + phase）
+//  swing    绕 axis 往复摆动（幅度 amplitude 度）
+//  oscillate 沿 axis 往复平移（幅度 amplitude mm，正弦）
+//  slider   曲柄滑块（活塞）：沿 axis 按真实曲柄连杆规律往复，需 crankRadius / rodLength
+//  conrod   连杆：小头随活塞平移，同时绕 crankAxis 按 −asin(r·sinθ/L) 摆动
+// pivot 为转动中心相对零件原点的偏移（mm，装配坐标系）。所有轴向量都在装配坐标系中。
+const _q = new THREE.Quaternion();
+const _v = new THREE.Vector3();
+const _axis = new THREE.Vector3();
+const _pivot = new THREE.Vector3();
+const hasMotion = () => state.entries.some((e) => e.motion);
+
+function sliderOffset(m, th) {
+  const r = m.crankRadius;
+  const L = Math.max(m.rodLength, r * 1.05);
+  const s = r * Math.sin(th);
+  return r * Math.cos(th) + Math.sqrt(L * L - s * s) - (r + L);
+}
+
+function applyMotion() {
+  const active = state.mode === 'motion';
+  const theta = state.motionTime * Math.PI * 2 * 0.5; // 0.5 转/秒 × 转速倍率（已计入 motionTime）
+  for (const e of state.entries) {
+    if (!e.motion) continue;
+    if (!active) { e.obj.quaternion.copy(e.baseQuat); continue; }
+    const m = e.motion;
+    const th = theta * m.speed + (m.phase * Math.PI) / 180;
+    let ang = 0;
+    let trans = 0;
+    let rotAxis = m.axis;
+    if (m.type === 'rotate') ang = th;
+    else if (m.type === 'swing') ang = ((m.amplitude * Math.PI) / 180) * Math.sin(th);
+    else if (m.type === 'oscillate') trans = m.amplitude * Math.sin(th);
+    else if (m.type === 'slider') trans = sliderOffset(m, th);
+    else if (m.type === 'conrod') {
+      trans = sliderOffset(m, th);
+      const k = Math.max(-1, Math.min(1, (m.crankRadius * Math.sin(th)) / Math.max(m.rodLength, m.crankRadius * 1.05)));
+      ang = -Math.asin(k);
+      rotAxis = m.crankAxis;
+    }
+    _axis.fromArray(rotAxis);
+    _q.setFromAxisAngle(_axis, ang);
+    e.obj.quaternion.copy(_q).multiply(e.baseQuat);
+    if (trans) e.obj.position.addScaledVector(_v.fromArray(m.axis), trans);
+    if (ang && (m.pivot[0] || m.pivot[1] || m.pivot[2])) {
+      _pivot.fromArray(m.pivot);
+      e.obj.position.add(_pivot).sub(_v.copy(_pivot).applyQuaternion(_q));
+    }
+  }
+}
+
+// 按需渲染：只有画面有变化（动画、拖动、切换状态）时才重绘，静止时不占用显卡
+controls.addEventListener('change', invalidate);
+
 function tick() {
   const dt = Math.min(clock.getDelta(), 0.05);
+  let moving = false;
   for (const e of state.entries) {
     const d = e.tTarget - e.t;
+    if (d !== 0) moving = true;
     e.t = Math.abs(d) < 1e-4 ? e.tTarget : e.t + d * Math.min(1, dt * 5);
     e.obj.position.copy(e.basePos).addScaledVector(e.explodeVec, e.t * state.explodeAmount);
   }
-  updateFloor();
+  if (updateFloor()) moving = true;
+  if (state.mode === 'motion') {
+    if (state.motionPlaying) { state.motionTime += dt * state.motionSpeed; moving = true; }
+    applyMotion();
+  } else if (state.motionApplied) {
+    applyMotion(); // 离开运动模式：零件转回原始姿态
+    state.motionApplied = false;
+    moving = true;
+  }
+  if (state.mode === 'motion') state.motionApplied = true;
   if (camAnim) {
+    moving = true;
     camAnim.t += dt / camAnim.dur;
     const k = ease(Math.min(camAnim.t, 1));
     camera.position.lerpVectors(camAnim.fromP, camAnim.toP, k);
@@ -362,7 +594,10 @@ function tick() {
     if (camAnim.t >= 1) camAnim = null;
   }
   controls.update();
-  renderer.render(scene, camera);
+  if (moving || dirty) {
+    dirty = false;
+    renderFrame();
+  }
   requestAnimationFrame(tick);
 }
 requestAnimationFrame(tick);
@@ -376,7 +611,7 @@ function pick(ev) {
   const r = renderer.domElement.getBoundingClientRect();
   ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
   raycaster.setFromCamera(ndc, camera);
-  const skipShell = state.mode === 'xray' && (state.xray === 'transparent' || state.xray === 'hidden');
+  const skipShell = state.mode === 'motion' || (state.mode === 'xray' && (state.xray === 'transparent' || state.xray === 'hidden'));
   const objs = [];
   for (const e of state.entries) {
     if (!e.obj.visible || (skipShell && e.part.is_shell)) continue;
@@ -458,6 +693,10 @@ function select(e, { fly = true } = {}) {
 
 // ---------------- 模式 ----------------
 function setMode(mode) {
+  if (mode === 'motion' && !hasMotion()) {
+    toast('这个模型没有运动数据：AI 生成时没有标注会动的零件（可重新拆解，或在补充说明里写"标注运动部件"）');
+    return;
+  }
   stopPlay();
   const prev = state.mode;
   state.mode = mode;
@@ -472,6 +711,8 @@ function setMode(mode) {
   $('xrayCtl').hidden = mode !== 'xray';
   $('explodeCtl').hidden = !(mode === 'explode' || mode === 'step');
   $('stepCtl').hidden = mode !== 'step';
+  $('motionCtl').hidden = mode !== 'motion';
+  if (mode === 'motion') { state.motionPlaying = true; syncMotionCtl(); }
   document.querySelectorAll('#xrayCtl button').forEach((b) => b.classList.toggle('on', b.dataset.xray === state.xray));
   refreshVisuals();
   renderPartList();
@@ -644,7 +885,21 @@ function renderRight() {
       <button data-color="material" class="${state.colorMode === 'material' ? 'on' : ''}">材质展示</button>
       <button data-color="group" class="${state.colorMode === 'group' ? 'on' : ''}">部件分色</button>
     </div>
+    <div class="rp-sec">展示背景</div>
+    <div class="seg" id="themeSeg">
+      <button data-theme="light" class="${state.theme !== 'dark' ? 'on' : ''}">浅色工作室</button>
+      <button data-theme="dark" class="${state.theme === 'dark' ? 'on' : ''}">深色展厅</button>
+    </div>
     <div class="rp-actions"><button class="btn" id="exportBtn">导出 JSON</button></div>`;
+}
+
+const MOTION_NAMES = { rotate: '连续转动', swing: '往复摆动', oscillate: '往复移动', slider: '曲柄滑块往复', conrod: '连杆（平移 + 摆动）' };
+function axisName(a) {
+  const i = a.map(Math.abs).indexOf(Math.max(...a.map(Math.abs)));
+  return ['X', 'Y', 'Z'][i];
+}
+function motionLabel(m) {
+  return `${MOTION_NAMES[m.type] || m.type} · ${m.type === 'conrod' ? '沿' : (m.type === 'oscillate' || m.type === 'slider' ? '沿' : '绕')} ${axisName(m.axis)} 轴`;
 }
 
 function renderPartDetail(rp, e) {
@@ -665,6 +920,7 @@ function renderPartDetail(rp, e) {
       <div class="rp-row"><span>拆卸顺序</span><b>第 ${p.order} 步</b></div>
       <div class="rp-row"><span>外形尺寸</span><b>${fmt(sz.x)} × ${fmt(sz.y)} × ${fmt(sz.z)} mm</b></div>
       <div class="rp-row"><span>外壳件</span><b>${p.is_shell ? '是' : '否'}</b></div>
+      ${p.motion ? `<div class="rp-row"><span>运动方式</span><b>${motionLabel(p.motion)}</b></div>` : ''}
     </div>
     ${p.description ? `<div class="rp-sec">结构说明</div><p class="rp-text">${esc(p.description)}</p>` : ''}
     <div class="rp-actions">
@@ -704,6 +960,10 @@ $('rightPanel').addEventListener('click', (ev) => {
     const list = state.ordered.filter((x) => !x.hidden);
     const i = list.indexOf(state.selected);
     select(list[(i + d + list.length) % list.length]);
+  } else if (t.dataset.theme) {
+    applyTheme(t.dataset.theme);
+    refreshVisuals();
+    renderRight();
   } else if (t.dataset.color) {
     state.colorMode = t.dataset.color;
     refreshVisuals();
@@ -758,6 +1018,8 @@ function loadItem(item) {
   state.step = 0;
   ui.overview = false;
   ui.sheetHidden = false;
+  state.motionTime = 0;
+  state.motionApplied = false;
   buildModel(model);
   store.set(LAST_KEY, item.id);
   const o = model.object;
@@ -771,7 +1033,7 @@ function loadItem(item) {
   $('photoBtn').disabled = !item.photo;
   $('photoBtn').title = item.photo ? '查看上传的照片' : '示例模型没有实机照片';
   document.title = `${o.name} · 拆解 LAB`;
-  setMode(state.mode === 'step' ? 'overview' : state.mode);
+  setMode(state.mode === 'step' || (state.mode === 'motion' && !hasMotion()) ? 'overview' : state.mode);
   fitView('iso', true);
   renderTabs();
   $('libTabs').querySelector('.active')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
@@ -1040,7 +1302,7 @@ $('importInput').addEventListener('change', async (ev) => {
   } catch (err) { toast(`导入失败：${err.message}`); }
 });
 $('shotBtn').addEventListener('click', () => {
-  renderer.render(scene, camera);
+  renderFrame();
   download(`${state.model?.object.name || 'model'}-${Date.now()}.png`, renderer.domElement.toDataURL('image/png'));
 });
 $('resetBtn').addEventListener('click', () => {
@@ -1052,6 +1314,11 @@ $('resetBtn').addEventListener('click', () => {
   select(null, { fly: false });
   setMode('overview');
   fitView('iso');
+});
+$('themeBtn').addEventListener('click', () => {
+  applyTheme(state.theme === 'dark' ? 'light' : 'dark');
+  refreshVisuals();
+  renderRight();
 });
 $('fullBtn').addEventListener('click', () => {
   if (document.fullscreenElement) document.exitFullscreen();
@@ -1080,10 +1347,18 @@ $('viewbar').addEventListener('click', (ev) => {
   if (b) fitView(b.dataset.view);
 });
 $('explodeRange').addEventListener('input', (ev) => {
+  invalidate();
   state.explodeAmount = +ev.target.value;
   $('explodeVal').textContent = `${Math.round(state.explodeAmount * 100)}%`;
 });
 $('explodeRange').addEventListener('change', () => fitView(state.view));
+function syncMotionCtl() {
+  $('motionPlay').textContent = state.motionPlaying ? '❚❚' : '▶';
+  $('motionPlay').classList.toggle('on', state.motionPlaying);
+  $('motionSpeedVal').textContent = `${state.motionSpeed.toFixed(1)}×`;
+}
+$('motionPlay').addEventListener('click', () => { state.motionPlaying = !state.motionPlaying; syncMotionCtl(); invalidate(); });
+$('motionSpeed').addEventListener('input', (ev) => { state.motionSpeed = +ev.target.value; syncMotionCtl(); });
 $('stepPrev').addEventListener('click', () => { stopPlay(); state.step -= 1; applyStep(); });
 $('stepNext').addEventListener('click', () => { stopPlay(); state.step += 1; applyStep(); });
 $('stepPlay').addEventListener('click', togglePlay);
@@ -1135,6 +1410,7 @@ async function checkAi() {
   refreshUploadUI();
 }
 
+applyTheme(store.get(THEME_KEY, 'light'));
 const lastId = store.get(LAST_KEY, null);
 loadItem(allItems().find((x) => x.id === lastId) || SAMPLES[0]);
 checkAi();
