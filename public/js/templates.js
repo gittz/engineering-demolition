@@ -320,6 +320,71 @@ export const TEMPLATES = {
     return merge([small, big, beam, cap]);
   },
 
+  // 叶片（风机叶片、螺旋桨、风扇叶）：圆柱形叶根过渡到翼型，向叶尖收窄并扭转
+  // 原点在叶根中心，展向沿 +Y，弦向沿局部 X（前缘在 -X），厚度沿局部 Z；twist 为叶根处的扭角（度），到叶尖线性减到 0
+  blade(p) {
+    const L = num(p.length, 100);
+    const rr = num(p.rootRadius, L * 0.04);
+    const cMax = num(p.chord, L * 0.09);
+    const cTip = num(p.tipChord, cMax * 0.25);
+    const tw = Number.isFinite(+p.twist) ? +p.twist : 12;
+    const Lc = Math.min(L, num(p.cut, L)); // 只画到展向 cut 处（截断显示叶根段）
+    const N = 40;
+    const S = 44;
+    const yRoot = L * 0.04, yMax = L * 0.2;
+    const pos = [];
+    const ring = (y) => {
+      const w = y <= yRoot ? 0 : y >= yMax ? 1 : (() => { const t = (y - yRoot) / (yMax - yRoot); return t * t * (3 - 2 * t); })();
+      const f = y <= yMax ? 0 : (y - yMax) / (L - yMax);
+      const c = y <= yMax ? cMax : cMax + (cTip - cMax) * Math.pow(f, 0.8);
+      const th = y <= yMax ? 0.4 : 0.4 - 0.25 * f;
+      const phi = ((y <= yRoot ? tw : tw * (1 - (y - yRoot) / (L - yRoot))) * Math.PI) / 180;
+      const cs = Math.cos(phi), sn = Math.sin(phi);
+      const out = [];
+      for (let i = 0; i < N; i++) {
+        const a = (i / N) * Math.PI * 2;
+        const x = 0.5 * (1 + Math.cos(a));
+        const yt = 5 * th * (0.2969 * Math.sqrt(x) - 0.126 * x - 0.3516 * x * x + 0.2843 * x ** 3 - 0.1036 * x ** 4);
+        const zc = 0.03 * 4 * x * (1 - x);
+        const fx = (x - 0.3) * c;
+        const fz = (zc + (Math.sin(a) >= 0 ? yt : -yt)) * c;
+        const X = (1 - w) * rr * Math.cos(a) + w * fx;
+        const Z = (1 - w) * rr * Math.sin(a) + w * fz;
+        out.push([X * cs - Z * sn, y, X * sn + Z * cs]);
+      }
+      return out;
+    };
+    const rings = [];
+    for (let j = 0; j <= S; j++) rings.push(ring(Lc * Math.pow(j / S, 1.15)));
+    const idx = [];
+    rings.forEach((r) => r.forEach((v) => pos.push(...v)));
+    for (let j = 0; j < S; j++) {
+      for (let i = 0; i < N; i++) {
+        const a = j * N + i, b = j * N + ((i + 1) % N), c = a + N, d = b + N;
+        idx.push(a, c, b, b, c, d);
+      }
+    }
+    const side = new THREE.BufferGeometry();
+    side.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    side.setIndex(idx);
+    side.computeVertexNormals();
+    // 叶根、叶尖封口（单独的顶点，法线朝外）
+    const cap = (r, up) => {
+      const cx = r.reduce((s, v) => s + v[0], 0) / N, cz = r.reduce((s, v) => s + v[2], 0) / N;
+      const p2 = [];
+      for (let i = 0; i < N; i++) {
+        const a = r[i], b = r[(i + 1) % N];
+        if (up) p2.push(cx, a[1], cz, b[0], b[1], b[2], a[0], a[1], a[2]);
+        else p2.push(cx, a[1], cz, a[0], a[1], a[2], b[0], b[1], b[2]);
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(p2, 3));
+      g.computeVertexNormals();
+      return g;
+    };
+    return merge([side, cap(rings[0], false), cap(rings[S], true)]);
+  },
+
   // 外螺纹杆/丝杠：原点在中心
   threadedRod(p) {
     const d = num(p.diameter, 10);

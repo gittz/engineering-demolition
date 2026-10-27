@@ -1,6 +1,6 @@
 // 清洗 AI 返回的数据：补默认值、去掉非法数字、保证 id 唯一、展开阵列、规范运动数据
 const BASIC_SHAPES = ['box', 'roundedBox', 'cylinder', 'tube', 'cone', 'sphere', 'torus', 'capsule', 'spring', 'gear', 'lathe', 'extrude'];
-const TEMPLATE_SHAPES = ['bolt', 'nut', 'bearing', 'valvePlate', 'flange', 'pulley', 'finnedCylinder', 'crankshaft', 'piston', 'conrod', 'threadedRod'];
+const TEMPLATE_SHAPES = ['bolt', 'nut', 'bearing', 'valvePlate', 'flange', 'pulley', 'finnedCylinder', 'crankshaft', 'piston', 'conrod', 'threadedRod', 'blade'];
 const SHAPES = new Set([...BASIC_SHAPES, ...TEMPLATE_SHAPES]);
 const MATS = new Set(['steel', 'stainless', 'aluminum', 'brass', 'copper', 'chrome', 'iron', 'paint', 'plastic', 'transparent_plastic', 'rubber', 'glass', 'liquid', 'fiber', 'ceramic', 'wood', 'pcb', 'magnet', 'fabric', 'paper', 'foam']);
 const MOTIONS = new Set(['rotate', 'oscillate', 'swing', 'slider', 'conrod']);
@@ -80,6 +80,8 @@ export function normalizeModel(raw) {
     principle: str(o.principle, ''),
     overall_size_mm: v3(o.overall_size_mm, [0, 0, 0]),
     confidence: Number.isFinite(+o.confidence) ? Math.max(0, Math.min(1, +o.confidence)) : null,
+    // 可选：默认「整机」视角的观察方向（从模型中心指向相机），比如让长条形设备侧面朝向观众
+    view: Array.isArray(o.view) && o.view.length >= 3 && o.view.slice(0, 3).every((x) => Number.isFinite(+x)) && o.view.slice(0, 3).some((x) => +x) ? o.view.slice(0, 3).map(Number) : null,
     assumptions: Array.isArray(o.assumptions) ? o.assumptions.filter((x) => typeof x === 'string').slice(0, 12) : [],
   };
   const seen = new Set();

@@ -6,7 +6,7 @@ export const SHAPE_TYPES = [
   'capsule', 'spring', 'gear', 'lathe', 'extrude',
   // 零件模板
   'bolt', 'nut', 'bearing', 'valvePlate', 'flange', 'pulley', 'finnedCylinder',
-  'crankshaft', 'piston', 'conrod', 'threadedRod',
+  'crankshaft', 'piston', 'conrod', 'threadedRod', 'blade',
 ];
 
 export const MOTION_TYPES = ['rotate', 'swing', 'oscillate', 'slider', 'conrod'];
@@ -69,6 +69,11 @@ const shapeSchema = {
         bigRadius: { type: 'number' },
         smallRadius: { type: 'number' },
         pitch: { type: 'number' },
+        rootRadius: { type: 'number' },
+        chord: { type: 'number' },
+        tipChord: { type: 'number' },
+        twist: { type: 'number' },
+        cut: { type: 'number' },
         sharp: { type: 'boolean' },
         points: {
           type: 'array',
@@ -203,6 +208,7 @@ export const SYSTEM_PROMPT = `你是一名资深机械/产品结构工程师，�
 - piston（活塞）: radius, height, rings?(环槽数) —— 原点在活塞中心，顶面朝 +Y
 - conrod（连杆）: length(中心距), bigRadius, smallRadius, thickness —— 原点在小头孔中心，大头在 -Y 方向 length 处，两孔轴线沿局部 Z
 - threadedRod（螺杆/丝杠/双头螺柱）: diameter, length, pitch?
+- blade（风机叶片、螺旋桨叶、风扇叶）: length, rootRadius?(叶根圆柱半径), chord?(最大弦长), tipChord?(叶尖弦长), twist?(叶根扭角，度), cut?(只画到展向这个位置，用于截断显示) —— 原点在叶根中心，展向沿 +Y，弦向沿局部 X，厚度沿局部 Z；多片叶用 array 圆周阵列或分别写 rotation
 螺栓、螺母、散热片这类重复件用 array 阵列一次写完，例如 4 个缸盖螺栓：{"type":"bolt", "params":{...}, "position":[0,120,0], "array":{"count":4,"radius":42,"axis":"y","startAngle":45}}。
 
 ## 运动（motion，强烈建议为会动的零件填写）

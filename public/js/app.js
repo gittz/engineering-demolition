@@ -486,7 +486,8 @@ function fitView(view = state.view, instant = false) {
   state.view = view;
   const box = targetBox(state.entries);
   if (box.isEmpty()) return;
-  const dir = new THREE.Vector3(...VIEWS[view]).normalize();
+  const custom = view === 'iso' && state.model?.object?.view;
+  const dir = new THREE.Vector3(...(custom || VIEWS[view])).normalize();
   const center = box.getCenter(new THREE.Vector3());
   flyTo(center.clone().addScaledVector(dir, fitDistance(box, center, dir, 0.72)), center, 0.9, instant);
 }
