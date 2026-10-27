@@ -1,14 +1,19 @@
 // 把 AI 输出的 shape 描述转换成 Three.js 几何体与材质
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/RoundedBoxGeometry.js';
-import { TEMPLATES } from './templates.js';
+import { TEMPLATES, BEVEL, latheSharp } from './templates.js';
 
 const SEG = 48;
 const num = (v, d) => (Number.isFinite(+v) && +v > 0 ? +v : d);
 
 // ---------- 倒角：真实零件的边缘都有倒角/圆角，能在边上形成高光，质感差别很大 ----------
-// 倒角尺寸取最小边的 6%，上限 1.2mm
-const bevelOf = (...dims) => Math.min(Math.min(...dims) * 0.06, 1.2);
+// 倒角尺寸取最小边的 6%，上限 1.2mm × 模型尺寸系数
+const bevelOf = (...dims) => Math.min(Math.min(...dims) * 0.06, 1.2 * BEVEL.k);
+
+// 按模型整体尺寸设置倒角系数：约 120mm 以内为 1，更大的设备按比例放大（最多 40 倍）
+export function setBevelScale(sizeMM) {
+  BEVEL.k = Math.max(1, Math.min(40, (+sizeMM || 0) / 120));
+}
 const V2 = (pts) => pts.map(([x, y]) => new THREE.Vector2(x, y));
 
 // 带倒角的圆柱/圆台（回转体轮廓，自下而上，法线朝外）
@@ -39,7 +44,7 @@ function chamferedTube(ro, ri, h, seg = SEG) {
 
 // 拉伸体统一加小倒角（bevelOffset 为负，保证外轮廓尺寸不变）
 function bevelExtrude(shape, t, sizeHint) {
-  const bt = Math.min(t * 0.12, 0.6, sizeHint * 0.15);
+  const bt = Math.min(t * 0.12, 0.6 * BEVEL.k, sizeHint * 0.15);
   if (bt < 0.02) {
     const g = new THREE.ExtrudeGeometry(shape, { depth: t, bevelEnabled: false, curveSegments: 24 });
     g.translate(0, 0, -t / 2);
@@ -143,7 +148,9 @@ export function buildShapeGeometry(s) {
       const pts = (Array.isArray(p.points) ? p.points : [])
         .filter((q) => Array.isArray(q) && q.length >= 2 && Number.isFinite(+q[0]) && Number.isFinite(+q[1]))
         .map(([r, y]) => new THREE.Vector2(Math.max(0, +r), +y));
-      g = pts.length >= 2 ? new THREE.LatheGeometry(pts, SEG) : new THREE.CylinderGeometry(3, 3, 6, SEG);
+      // sharp: 每段单独计算法线，台阶、法兰这类直角轮廓不会出现发灰的过渡；曲面轮廓（封头、球面）用默认的平滑法线
+      g = pts.length < 2 ? new THREE.CylinderGeometry(3, 3, 6, SEG)
+        : p.sharp ? latheSharp(pts.map((v) => [v.x, v.y])) : new THREE.LatheGeometry(pts, SEG);
       break;
     }
     case 'extrude': {
@@ -180,6 +187,7 @@ const MAT = {
   copper: { color: '#c06a3d', metalness: 1, roughness: 0.26 },
   chrome: { color: '#e6eaed', metalness: 1, roughness: 0.06 },
   iron: { color: '#5c6166', metalness: 0.85, roughness: 0.55 },
+  paint: { color: '#3f7d93', metalness: 0.15, roughness: 0.4, clearcoat: 0.6, clearcoatRoughness: 0.28 },
   plastic: { color: '#3a4047', metalness: 0, roughness: 0.42, clearcoat: 0.3, clearcoatRoughness: 0.35 },
   transparent_plastic: { color: '#9fd4ff', metalness: 0, roughness: 0.06, opacity: 0.52, clearcoat: 1, clearcoatRoughness: 0.05 },
   rubber: { color: '#26292c', metalness: 0, roughness: 0.88 },
@@ -197,7 +205,7 @@ const MAT = {
 
 export const MATERIAL_LABEL = {
   steel: '钢', stainless: '不锈钢', aluminum: '铝合金', brass: '黄铜', copper: '铜', chrome: '镀铬金属',
-  iron: '铸铁', plastic: '塑料', transparent_plastic: '透明塑料', rubber: '橡胶', glass: '玻璃',
+  iron: '铸铁', paint: '涂装金属', plastic: '塑料', transparent_plastic: '透明塑料', rubber: '橡胶', glass: '玻璃',
   liquid: '液体', fiber: '纤维', ceramic: '陶瓷/合金', wood: '木材', pcb: '电路板', magnet: '磁体',
   fabric: '织物', paper: '纸', foam: '泡沫',
 };

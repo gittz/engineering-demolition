@@ -2,7 +2,7 @@
 const BASIC_SHAPES = ['box', 'roundedBox', 'cylinder', 'tube', 'cone', 'sphere', 'torus', 'capsule', 'spring', 'gear', 'lathe', 'extrude'];
 const TEMPLATE_SHAPES = ['bolt', 'nut', 'bearing', 'valvePlate', 'flange', 'pulley', 'finnedCylinder', 'crankshaft', 'piston', 'conrod', 'threadedRod'];
 const SHAPES = new Set([...BASIC_SHAPES, ...TEMPLATE_SHAPES]);
-const MATS = new Set(['steel', 'stainless', 'aluminum', 'brass', 'copper', 'chrome', 'iron', 'plastic', 'transparent_plastic', 'rubber', 'glass', 'liquid', 'fiber', 'ceramic', 'wood', 'pcb', 'magnet', 'fabric', 'paper', 'foam']);
+const MATS = new Set(['steel', 'stainless', 'aluminum', 'brass', 'copper', 'chrome', 'iron', 'paint', 'plastic', 'transparent_plastic', 'rubber', 'glass', 'liquid', 'fiber', 'ceramic', 'wood', 'pcb', 'magnet', 'fabric', 'paper', 'foam']);
 const MOTIONS = new Set(['rotate', 'oscillate', 'swing', 'slider', 'conrod']);
 
 const v3 = (a, d = [0, 0, 0]) => (Array.isArray(a) && a.length >= 3 ? a.slice(0, 3).map((x, i) => (Number.isFinite(+x) ? +x : d[i])) : d.slice());

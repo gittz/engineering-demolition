@@ -5,7 +5,8 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const SEG = 48;
 const num = (v, d) => (Number.isFinite(+v) && +v > 0 ? +v : d);
-const int = (v, d, min = 1, max = 64) => Math.max(min, Math.min(max, Math.round(num(v, d))));
+// 允许下限为 0 的参数（如法兰孔数、皮带轮槽数）显式写 0
+const int = (v, d, min = 1, max = 64) => Math.max(min, Math.min(max, Math.round(min === 0 && v !== null && v !== '' && +v === 0 ? 0 : num(v, d))));
 const V2 = (pts) => pts.map(([x, y]) => new THREE.Vector2(x, y));
 
 // 合并多个几何体（统一为非索引、只保留 position/normal/uv）
@@ -37,7 +38,7 @@ export function latheSharp(pts, seg = SEG) {
 // 带倒角的回转体（轮廓自下而上，法线朝外）
 function chamferLathe(rOuter, h, rInner = 0, c = null, seg = SEG) {
   const hh = h / 2;
-  const ch = c ?? Math.min((rOuter - rInner) * 0.25, h * 0.15, 1.2);
+  const ch = c ?? Math.min((rOuter - rInner) * 0.25, h * 0.15, 1.2 * BEVEL.k);
   const pts = rInner > 0
     ? [[rInner, -hh], [rOuter - ch, -hh], [rOuter, -hh + ch], [rOuter, hh - ch], [rOuter - ch, hh], [rInner, hh], [rInner, -hh]]
     : [[0, -hh], [rOuter - ch, -hh], [rOuter, -hh + ch], [rOuter, hh - ch], [rOuter - ch, hh], [0, hh]];
@@ -45,7 +46,7 @@ function chamferLathe(rOuter, h, rInner = 0, c = null, seg = SEG) {
 }
 
 function extrudeY(shape, t, bevel = true) {
-  const bt = bevel ? Math.min(t * 0.12, 0.5) : 0;
+  const bt = bevel ? Math.min(t * 0.12, 0.5 * BEVEL.k) : 0;
   const depth = Math.max(t - 2 * bt, t * 0.2);
   const g = new THREE.ExtrudeGeometry(shape, bt > 0.02
     ? { depth, bevelEnabled: true, bevelThickness: bt, bevelSize: bt, bevelOffset: -bt, bevelSegments: 2, curveSegments: 32 }
@@ -79,6 +80,10 @@ class Helix extends THREE.Curve {
     return out.set(this.r * Math.cos(a), this.y0 + this.h * t, this.r * Math.sin(a));
   }
 }
+
+// 倒角上限随模型尺寸缩放：打火机这类小件上限约 1mm，几米长的设备按比例放大，
+// 否则大设备的边缘会像刀切一样锐利，没有高光过渡（buildModel 前由 setBevelScale 设置）
+export const BEVEL = { k: 1 };
 
 export const TEMPLATES = {
   // 六角头螺栓：原点在螺栓头下表面中心，螺杆沿 -Y 方向伸出

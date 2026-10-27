@@ -130,7 +130,7 @@ AI 除了用方块、圆柱等基础形状拼零件，还可以直接调用常�
 重复件可用 `array`（圆周 / 线性阵列）一次写完。
 
 会动的零件带 `motion` 字段：`rotate`（连续转动）、`swing`（摆动）、`oscillate`（往复移动）、`slider`（曲柄滑块，活塞）、`conrod`（连杆）。
-内置示例「单缸风冷空气压缩机」演示了完整的曲柄连杆机构，可作为数据格式参考（`public/js/samples.js`）。
+内置示例「单缸风冷空气压缩机」演示了完整的曲柄连杆机构；「石化四缸往复机」（`public/js/sample-rc04.js`）演示了四拐曲轴带动四列连杆、十字头、活塞的多列相位运动，并用代码批量生成对称结构。两者都可作为数据格式参考。
 
 ## 工作原理
 
@@ -158,6 +158,7 @@ public/                网页（静态资源）
   js/geometry.js       形状 → Three.js 几何体 / 材质
   js/normalize.js      AI 返回数据清洗
   js/samples.js        内置示例（也是数据格式参考）
+  js/sample-rc04.js    四缸往复压缩机示例（代码生成）
   vendor/three/        Three.js r170（本地化，无需 CDN）
 ```
 

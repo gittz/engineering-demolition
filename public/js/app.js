@@ -4,7 +4,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { buildShapeGeometry, makeMaterial, MATERIAL_LABEL, PALETTE } from './geometry.js';
+import { buildShapeGeometry, makeMaterial, setBevelScale, MATERIAL_LABEL, PALETTE } from './geometry.js';
 import { normalizeModel } from './normalize.js';
 import { SAMPLES } from './samples.js';
 import { prepareImage, formatBytes } from './compress.js';
@@ -272,11 +272,21 @@ function disposeModel() {
   state.entries = [];
 }
 
+// 建模前粗估整体尺寸（mm），用来决定倒角大小
+function estimateSizeMM(model) {
+  const os = model.object?.overall_size_mm;
+  if (Array.isArray(os) && os.some((v) => v > 0)) return Math.max(...os);
+  let m = 0;
+  for (const p of model.parts) for (const s of p.shapes) for (let k = 0; k < 3; k++) m = Math.max(m, Math.abs(p.position[k] + s.position[k]));
+  return m * 2;
+}
+
 function buildModel(model) {
   disposeModel();
   const inner = new THREE.Group();
   modelRoot.add(inner);
   const groups = [...new Set(model.parts.map((p) => p.group))];
+  setBevelScale(estimateSizeMM(model));
 
   model.parts.forEach((p, idx) => {
     const g = new THREE.Group();

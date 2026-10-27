@@ -151,7 +151,8 @@ svg { width: 18px; height: 18px; flex: none; }
 .stage { position: relative; background: var(--stage-bg); min-width: 0; min-height: 0; overflow: hidden; color: var(--stage-ink); }
 .viewport { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 35%, #fbfcfd 0%, #eef1f3 55%, #e3e8eb 100%); }
 .viewport canvas { display: block; width: 100%; height: 100%; outline: none; }
-.stage-head { position: absolute; left: 40px; top: 32px; pointer-events: none; max-width: 60%; }
+.stage-head { position: absolute; left: 40px; top: 32px; pointer-events: none; max-width: min(60%, calc(100% - 420px)); }
+.stage-head .eyebrow { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .eyebrow { font-family: var(--mono); letter-spacing: .22em; text-transform: uppercase; color: #52616d; font-size: 13px; }
 .stage-head h1 { margin: 6px 0 6px; font-size: 32px; font-weight: 800; color: #1a242d; letter-spacing: .02em; }
 .stage-head h1 em { font-style: normal; font-family: var(--mono); font-weight: 400; font-size: 22px; color: #6b7a86; margin-left: 8px; }

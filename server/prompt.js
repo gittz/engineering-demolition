@@ -12,7 +12,7 @@ export const SHAPE_TYPES = [
 export const MOTION_TYPES = ['rotate', 'swing', 'oscillate', 'slider', 'conrod'];
 
 export const MATERIALS = [
-  'steel', 'stainless', 'aluminum', 'brass', 'copper', 'chrome', 'iron',
+  'steel', 'stainless', 'aluminum', 'brass', 'copper', 'chrome', 'iron', 'paint',
   'plastic', 'transparent_plastic', 'rubber', 'glass', 'liquid', 'fiber',
   'ceramic', 'wood', 'pcb', 'magnet', 'fabric', 'paper', 'foam',
 ];
@@ -69,6 +69,7 @@ const shapeSchema = {
         bigRadius: { type: 'number' },
         smallRadius: { type: 'number' },
         pitch: { type: 'number' },
+        sharp: { type: 'boolean' },
         points: {
           type: 'array',
           items: { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 2 },
@@ -185,7 +186,7 @@ export const SYSTEM_PROMPT = `你是一名资深机械/产品结构工程师，�
 - capsule: radius, length(直段长度) —— 轴线沿 Y
 - spring（螺旋弹簧）: radius(中径/2), wireRadius(线径/2), turns(圈数), height(自由高度) —— 轴线沿 Y
 - gear（齿轮/滚花轮/棘轮）: radius(齿顶半径), teeth(齿数), toothDepth(齿高), thickness(厚度), innerRadius(可选，中心孔) —— 轴线沿 Y
-- lathe（回转体：喷嘴、瓶身、旋钮、笔尖、灯泡等）: points=[[r,y],...] 绕 Y 轴旋转的轮廓，r≥0；空心件按"外轮廓上行 + 内轮廓下行"描点
+- lathe（回转体：喷嘴、瓶身、旋钮、笔尖、灯泡等）: points=[[r,y],...] 绕 Y 轴旋转的轮廓，r≥0；空心件按"外轮廓上行 + 内轮廓下行"描点；台阶、法兰等直角轮廓加 sharp:true（边缘更清晰），曲面轮廓（封头、瓶身）不加
 - extrude（异形板件：支架、杠杆、拨片、卡扣）: points=[[x,y],...] 局部 XY 平面多边形，thickness 为沿 Z 的厚度（居中）
 需要轴线沿 X 时把 rotation 设为 [0,0,90]，沿 Z 时设为 [90,0,0]。复杂零件请用多个 shape 组合近似外形，宁可多用几个 shape 也要像。
 
@@ -220,7 +221,7 @@ pivot 为转动中心相对零件原点的偏移；转动件尽量把零件原�
 - order 为拆卸顺序（从 1 开始）：先拆外部紧固件和外壳，最后是核心件/基座。
 
 ## 颜色与材质
-- color 用真实外观颜色（#RRGGBB）；material 从给定枚举中选最接近的。液体、透明外壳要用 liquid / transparent_plastic / glass。
+- color 用真实外观颜色（#RRGGBB）；material 从给定枚举中选最接近的。液体、透明外壳要用 liquid / transparent_plastic / glass。工业设备的喷漆机身、罐体、底座用 paint（涂装金属），露出金属本色的零件才用 steel / iron。
 
 只通过 submit_teardown 输出结果，不要输出其它内容。`;
 
