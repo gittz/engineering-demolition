@@ -75,16 +75,17 @@ renderer.localClippingEnabled = true;
 viewport.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-// 摄影棚环境光：渐变穹顶 + 几块柔光箱（顶光、左右条形灯、背光）。
-// 金属件会映出干净的光带，透明件只有柔和的高光，不会映出杂物。
+// 摄影棚环境光：偏暗的穹顶 + 多条高亮条形灯 + 一圈地平线光带。
+// 金属没有漫反射，看起来亮不亮全靠映出的环境：背景暗、灯条亮，金属上才会出现黑白分明的光带（镀铬、抛光钢的质感）；
+// 环境整体发灰时，金属就只剩一片灰。
 function studioEnvironment() {
   const env = new THREE.Scene();
   const dome = new THREE.SphereGeometry(60, 48, 24);
   const pos = dome.attributes.position;
   const cols = [];
-  const top = new THREE.Color(0.62, 0.66, 0.72);
-  const mid = new THREE.Color(0.32, 0.35, 0.39);
-  const bot = new THREE.Color(0.06, 0.07, 0.08);
+  const top = new THREE.Color(0.42, 0.44, 0.48);
+  const mid = new THREE.Color(0.17, 0.18, 0.2);
+  const bot = new THREE.Color(0.03, 0.035, 0.04);
   for (let i = 0; i < pos.count; i++) {
     const y = pos.getY(i) / 60;
     const c = y > 0 ? mid.clone().lerp(top, y) : mid.clone().lerp(bot, Math.min(1, -y * 1.6));
@@ -101,10 +102,20 @@ function studioEnvironment() {
     m.lookAt(0, 0, 0);
     env.add(m);
   };
-  softbox(36, 14, 5, 0, 40, 6);     // 顶部大柔光箱
-  softbox(8, 34, 3.2, -38, 8, 14);  // 左侧条形灯
-  softbox(8, 34, 2.4, 38, 8, 10);   // 右侧条形灯
-  softbox(30, 10, 1.6, 0, 12, -40); // 背光
+  softbox(36, 12, 6, 0, 40, 6);       // 顶部大柔光箱
+  softbox(5, 40, 12, -38, 6, 14);     // 左前条形灯
+  softbox(5, 40, 9, 38, 6, 10);       // 右前条形灯
+  softbox(4, 36, 7, -22, 6, -38);     // 左后条形灯
+  softbox(4, 36, 7, 28, 6, -32);      // 右后条形灯
+  softbox(16, 12, 3, 30, 16, 34);     // 正面补光（默认视角方向）
+  softbox(30, 8, 2.5, 0, 14, -42);    // 背光
+  // 地平线光带：一圈细长的亮环，圆柱、轴类零件上会出现一条横向高光
+  const band = new THREE.Mesh(
+    new THREE.CylinderGeometry(56, 56, 2.2, 64, 1, true),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 2.3, 2.5), side: THREE.BackSide }),
+  );
+  band.position.y = 3;
+  env.add(band);
   const tex = pmrem.fromScene(env, 0.02).texture;
   env.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
   return tex;

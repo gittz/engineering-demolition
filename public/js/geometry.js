@@ -180,13 +180,13 @@ export function buildShapeGeometry(s) {
 
 // ---------- 材质（物理材质：金属反射环境、塑料/陶瓷带清漆层、透明件带高光） ----------
 const MAT = {
-  steel: { color: '#9aa3ab', metalness: 1, roughness: 0.34 },
-  stainless: { color: '#c3c9ce', metalness: 1, roughness: 0.2 },
-  aluminum: { color: '#cdd2d7', metalness: 1, roughness: 0.3 },
-  brass: { color: '#c9a24a', metalness: 1, roughness: 0.24 },
-  copper: { color: '#c06a3d', metalness: 1, roughness: 0.26 },
+  steel: { color: '#9aa3ab', metalness: 1, roughness: 0.22 },
+  stainless: { color: '#c3c9ce', metalness: 1, roughness: 0.14 },
+  aluminum: { color: '#cdd2d7', metalness: 1, roughness: 0.24 },
+  brass: { color: '#c9a24a', metalness: 1, roughness: 0.18 },
+  copper: { color: '#c06a3d', metalness: 1, roughness: 0.2 },
   chrome: { color: '#e6eaed', metalness: 1, roughness: 0.06 },
-  iron: { color: '#5c6166', metalness: 0.85, roughness: 0.55 },
+  iron: { color: '#5c6166', metalness: 0.9, roughness: 0.42 },
   paint: { color: '#3f7d93', metalness: 0.15, roughness: 0.4, clearcoat: 0.6, clearcoatRoughness: 0.28 },
   plastic: { color: '#3a4047', metalness: 0, roughness: 0.42, clearcoat: 0.3, clearcoatRoughness: 0.35 },
   transparent_plastic: { color: '#9fd4ff', metalness: 0, roughness: 0.06, opacity: 0.52, clearcoat: 1, clearcoatRoughness: 0.05 },
@@ -216,8 +216,15 @@ export function materialSpec(kind) {
 
 export function makeMaterial(kind, color) {
   const spec = materialSpec(kind);
+  const base = new THREE.Color(color || spec.color);
+  // 金属的颜色就是它的反射率：真实钢、铝的反射率在 55%–90%，AI 常给的 #8x–#9x 灰偏暗，
+  // 直接用会让金属件发黑、没有光泽，所以把灰色金属在线性空间里往白色提亮 30%
+  if (spec.metalness >= 0.9) {
+    const hsl = base.getHSL({});
+    base.lerp(new THREE.Color(1, 1, 1), hsl.s < 0.25 ? 0.3 : 0.08); // 黄铜、紫铜这类有色金属只轻微提亮，保住颜色
+  }
   const m = new THREE.MeshPhysicalMaterial({
-    color: new THREE.Color(color || spec.color),
+    color: base,
     metalness: spec.metalness,
     roughness: spec.roughness,
     clearcoat: spec.clearcoat || 0,
