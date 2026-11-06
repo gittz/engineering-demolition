@@ -62,7 +62,8 @@ function readBody(req, limit = 20 * 1024 * 1024) {
 
 function serveStatic(req, res) {
   const urlPath = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-  const file = path.normalize(path.join(PUBLIC_DIR, urlPath === '/' ? 'index.html' : urlPath));
+  // 目录地址（如 /engine/）返回其中的 index.html，与 Cloudflare 静态资源的行为一致
+  const file = path.normalize(path.join(PUBLIC_DIR, urlPath.endsWith('/') ? urlPath + 'index.html' : urlPath));
   if (!file.startsWith(PUBLIC_DIR)) return send(res, 403, 'Forbidden', 'text/plain');
   fs.stat(file, (err, st) => {
     if (err || !st.isFile()) return send(res, 404, 'Not found', 'text/plain');

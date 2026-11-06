@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>涡扇发动机剖切 · 拆解 LAB</title>
+  <meta name="description" content="在浏览器里实时运行的高涵道比涡扇发动机三维剖切：切开外壳、隔离单个部件、开关气流、边转边看。" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./engine.css" />
+  <script type="importmap">
+    { "imports": { "three": "/vendor/three/three.module.js", "three/addons/": "/vendor/three/addons/" } }
+  </script>
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="/">拆解<span>/</span>LAB</a>
+    <nav>
+      <a href="/">设备库</a>
+      <a href="#tour">剖切演示</a>
+      <a href="#quiz">测验</a>
+    </nav>
+  </header>
+
+  <section class="hero">
+    <p class="eyebrow">交互式 3D / 航空动力</p>
+    <h1>一台可以拆开看的<br />喷气发动机。</h1>
+    <p class="lead">这是一台在浏览器里实时运转的高涵道比涡扇发动机。不是视频，也不是渲染图。你可以切开外壳、单独查看某一级、打开气流、让它边转边看。不用安装任何东西，往下滚动就是完整的讲解。</p>
+    <p class="links"><a href="#tour">开始浏览 →</a><a href="/">返回设备库 →</a></p>
+  </section>
+
+  <section class="tour" id="tour">
+    <div class="viewer-col">
+      <div class="viewer" id="viewer">
+        <canvas id="engineCanvas" aria-label="涡扇发动机三维剖切模型"></canvas>
+        <div class="hint" id="hint"><b>拖动</b> 旋转视角</div>
+        <div class="loading" id="loading">正在生成发动机…</div>
+        <div class="nogl" id="nogl" hidden>这一部分需要 WebGL。下面的文字讲解仍然可以阅读。</div>
+      </div>
+      <div class="toolbar" role="toolbar" aria-label="视图开关">
+        <button data-toggle="cut" aria-pressed="false">剖切<small>CUTAWAY</small></button>
+        <button data-toggle="iso" aria-pressed="false">隔离<small>ISOLATE</small></button>
+        <button data-toggle="spin" aria-pressed="true">旋转<small>SPIN</small></button>
+        <button data-toggle="flow" aria-pressed="true">气流<small>FLOW</small></button>
+      </div>
+      <div class="tabs" id="tabs" role="tablist"></div>
+      <div class="testbar"><span>最后有六道题</span><a href="#quiz">开始测验</a></div>
+    </div>
+
+    <div class="text-col">
+      <aside class="tracker">
+        <p class="label">当前位置 · YOU ARE HERE</p>
+        <ol id="tracker"></ol>
+      </aside>
+      <div class="steps" id="steps"></div>
+    </div>
+  </section>
+
+  <section class="quiz" id="quiz">
+    <p class="eyebrow">测验 / 6 题</p>
+    <h2>看懂了吗？</h2>
+    <form id="quizForm"></form>
+    <div class="quiz-foot">
+      <span class="score" id="score">0 / 6</span>
+      <button type="button" id="quizSubmit" class="primary">提交答案</button>
+      <button type="button" id="quizRetry" hidden>再试一次</button>
+    </div>
+  </section>
+
+  <section class="build">
+    <p class="eyebrow">关于这个剖切模型</p>
+    <h2>它是怎么做出来的</h2>
+    <p>整台发动机由代码实时生成：机匣和尾锥是回转体，风扇和各级叶片按弦长、扭角和弯度逐片生成，再按圆周阵列装到转子上。外壳用剖切平面切掉四分之一，内部的两根转子按不同转速旋转；气流是数千个粒子，沿外涵道和内涵道流动，颜色随温度变化。</p>
+    <p>同样的方式可以用在任何设备上。<a href="/">回到设备库</a>，上传一张照片，看看 AI 能拆出什么。</p>
+  </section>
+
+  <footer class="foot">
+    <span>拆解 LAB · AI 工程拆解</span>
+    <span>模型为结构示意，尺寸与级数为典型值，非特定型号。</span>
+  </footer>
+
+  <script type="module" src="./engine.js"></script>
+</body>
+</html>

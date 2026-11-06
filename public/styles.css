@@ -103,6 +103,7 @@ svg { width: 18px; height: 18px; flex: none; }
   background: var(--panel); border: 1px dashed var(--line-2); color: var(--text-2);
 }
 .lib-import:hover { color: var(--text); border-color: var(--accent-2); }
+a.lib-import { display: flex; align-items: center; text-decoration: none; font-size: 13px; white-space: nowrap; }
 
 /* ---------- workspace ---------- */
 .workspace {
