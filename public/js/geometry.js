@@ -231,5 +231,20 @@ export function makeMaterial(kind, color) {
   return m;
 }
 
+// 为可剖切件增加“截面色”。Three.js 的 clipping plane 不会自动生成封口，
+// 但薄壁件被切开后会露出背面；将背面统一画成较亮的平涂色，读起来就像 CAD 剖视图。
+export function enableSectionCap(material, capColor) {
+  const cap = new THREE.Color(capColor || material.color).lerp(new THREE.Color('#ffffff'), 0.48);
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uSectionCap = { value: cap };
+    shader.fragmentShader = shader.fragmentShader
+      .replace('void main() {', 'uniform vec3 uSectionCap;\nvoid main() {')
+      .replace('#include <opaque_fragment>', '#include <opaque_fragment>\nif (!gl_FrontFacing) gl_FragColor = vec4(uSectionCap, opacity);');
+  };
+  material.customProgramCacheKey = () => `section-cap-${cap.getHexString()}`;
+  material.userData.sectionCap = cap;
+  return material;
+}
+
 // 部件分色调色板（分组配色）
 export const PALETTE = ['#2f9e8f', '#e0884a', '#4a7fd6', '#c9506a', '#8b6bd6', '#d6b84a', '#4fb3d9', '#6fae4f', '#d66fb0', '#8a8f96'];
