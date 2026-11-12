@@ -9,6 +9,9 @@ import { normalizeModel } from './normalize.js';
 import { SAMPLES } from './samples.js';
 import { prepareImage, formatBytes } from './compress.js';
 import { createLighterEffects } from './lighter-effects.js';
+import { createEngineParts } from './engine-parts.js';
+import { ENGINE_FINISH } from './sample-engine.js';
+import { createEngineEffects } from './engine-effects.js';
 
 const $ = (id) => document.getElementById(id);
 const DEG = Math.PI / 180;
@@ -60,6 +63,8 @@ const state = {
   sectionT: 0,
   lighterEffects: null,
   lighterFrame: null,
+  engineModel: false,
+  engineEffects: null,
 };
 
 let dirty = true; // 按需渲染标记（见 tick）
@@ -154,6 +159,9 @@ scene.add(shadowPlane);
 const modelRoot = new THREE.Group();
 scene.add(modelRoot);
 const sectionPlane = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0); // 剖掉 z>0 的前半部分
+const sectionY = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
+const engineSectionPlanes = [sectionY, sectionPlane];
+const engineDepthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, clippingPlanes: engineSectionPlanes, clipIntersection: true, side: THREE.DoubleSide });
 const sectionDepthMaterial = new THREE.MeshDepthMaterial({
   depthPacking: THREE.RGBADepthPacking,
   clippingPlanes: [sectionPlane],
@@ -275,6 +283,8 @@ resize();
 
 // ---------------- 构建模型 ----------------
 function disposeModel() {
+  state.engineEffects?.dispose();
+  state.engineEffects = null;
   state.lighterEffects?.dispose();
   state.lighterEffects = null;
   modelRoot.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
@@ -299,18 +309,29 @@ function buildModel(model) {
   const groups = [...new Set(model.parts.map((p) => p.group))];
   setBevelScale(estimateSizeMM(model));
   const lighter = state.item?.id === 'sample-lighter';
+  const engineParts = model.parts.some((p) => p.shapes.some((s) => s.type === 'enginePart')) ? createEngineParts() : null;
+  state.engineModel = Boolean(engineParts);
 
   model.parts.forEach((p, idx) => {
     const g = new THREE.Group();
     g.position.fromArray(p.position);
     g.rotation.set(p.rotation[0] * DEG, p.rotation[1] * DEG, p.rotation[2] * DEG);
     const mat = makeMaterial(p.material, p.color);
+    const engineShape = p.shapes.find((s) => s.type === 'enginePart');
+    if (engineShape) {
+      const finish = ENGINE_FINISH[engineShape.params.key.split('_')[2]];
+      if (finish) { mat.metalness = finish[2]; mat.roughness = finish[3]; }
+      const hot = { hpt1: ['#ff5a14', 0.22], hpt2: ['#ff4a10', 0.1], ngv: ['#ff4a10', 0.18] }[engineShape.params.key.split('_')[2]];
+      if (hot) { mat.emissive.set(hot[0]); mat.emissiveIntensity = hot[1]; }
+    }
     const sectionable = p.is_shell || (lighter && p.id === 'fuel');
     if (sectionable) enableSectionCap(mat, p.id === 'fuel' ? '#b8e5ff' : null);
     const groupColor = new THREE.Color(PALETTE[groups.indexOf(p.group) % PALETTE.length]);
     const entry = {
       part: p, idx, obj: g, meshes: [], edges: [], mat, groupColor, sectionable,
       matColor: mat.color.clone(),
+      baseEmission: mat.emissive.clone(),
+      baseEmissionIntensity: mat.emissive.getHex() ? mat.emissiveIntensity : 0,
       baseOpacity: mat.userData.baseOpacity,
       basePos: g.position.clone(),
       baseQuat: g.quaternion.clone(),
@@ -322,7 +343,13 @@ function buildModel(model) {
     };
     for (const s of p.shapes) {
       let geo;
-      try { geo = buildShapeGeometry(s); } catch { geo = new THREE.BoxGeometry(2, 2, 2); }
+      if (s.type === 'enginePart') {
+        geo = engineParts.geometries.get(s.params.key);
+        if (!geo) throw new Error(`发动机组件不存在：${s.params.key}`);
+        engineParts.geometries.delete(s.params.key);
+      } else {
+        try { geo = buildShapeGeometry(s); } catch { geo = new THREE.BoxGeometry(2, 2, 2); }
+      }
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.fromArray(s.position);
       mesh.rotation.set(s.rotation[0] * DEG, s.rotation[1] * DEG, s.rotation[2] * DEG);
@@ -374,6 +401,10 @@ function buildModel(model) {
   state.groups = groups;
   state.sizeMM = size;
   if (lighter) state.lighterEffects = createLighterEffects(inner);
+  if (engineParts) {
+    for (const geometry of engineParts.geometries.values()) geometry.dispose();
+    state.engineEffects = createEngineEffects(inner, engineParts.flameGeometry);
+  }
 }
 
 // 地面跟随：始终位于当前（含爆炸位移）最低点下方
@@ -410,7 +441,7 @@ function refreshVisuals() {
   const { mode, xray, selected, colorMode } = state;
   const focus = mode === 'step' ? stepEntry() : selected;
   const wire = mode === 'wire';
-  const cutaway = (mode === 'xray' && xray === 'section') || (isLighter() && mode === 'motion');
+  const cutaway = (mode === 'xray' && xray === 'section') || ((isLighter() || state.engineModel) && mode === 'motion');
   for (const e of state.entries) {
     const shell = e.part.is_shell;
     let visible = !e.hidden;
@@ -422,12 +453,12 @@ function refreshVisuals() {
     let opacity = e.baseOpacity;
     let clip = null;
     // 运动演示时外壳自动变透明，方便看清内部零件的运动
-    if (mode === 'motion' && shell && !isLighter()) opacity = Math.min(opacity, 0.13);
+    if (mode === 'motion' && shell && !isLighter() && !state.engineModel) opacity = Math.min(opacity, 0.13);
     if (mode === 'xray' && shell) {
       if (xray === 'transparent') opacity = Math.min(opacity, 0.13);
     }
     if (cutaway && e.sectionable) {
-      clip = [sectionPlane];
+      clip = state.engineModel ? engineSectionPlanes : [sectionPlane];
       // 剖切时外壳恢复实体质感；液体保留半透明，像工程剖视里的介质填充。
       opacity = e.part.id === 'fuel' ? Math.max(opacity, 0.64) : Math.max(opacity, 0.96);
     }
@@ -441,13 +472,16 @@ function refreshVisuals() {
 
     const m = e.mat;
     m.color.copy(color);
-    m.emissive.setHex(ACCENT);
-    m.emissiveIntensity = glow;
+    m.emissive.copy(e.baseEmissionIntensity ? e.baseEmission : new THREE.Color(ACCENT));
+    if (glow && e.baseEmissionIntensity) m.emissive.lerp(new THREE.Color(ACCENT), 0.5);
+    m.emissiveIntensity = e.baseEmissionIntensity + glow;
     m.opacity = opacity;
     m.transparent = opacity < 0.999;
     m.depthWrite = opacity >= 0.5;
     m.side = clip ? THREE.DoubleSide : (opacity < 0.999 ? THREE.FrontSide : THREE.DoubleSide);
     m.clippingPlanes = clip;
+    m.clipIntersection = Boolean(clip && state.engineModel);
+    m.clipShadows = Boolean(clip);
     m.needsUpdate = true;
 
     // 线框
@@ -461,9 +495,11 @@ function refreshVisuals() {
     e.lineMat.color.setHex(e === focus ? ACCENT : (wire ? (dark ? 0x9fb3c2 : 0x22313c) : 0x7d8b95));
     e.lineMat.opacity = wire ? (focus && e !== focus ? 0.12 : 0.9) : 0.35;
     e.lineMat.clippingPlanes = clip;
+    e.lineMat.clipIntersection = Boolean(clip && state.engineModel);
     for (const l of e.edges) l.visible = showEdges;
     for (const mesh of e.meshes) {
       mesh.material = wire ? e.wireMat : m;
+      mesh.customDepthMaterial = clip ? (state.engineModel ? engineDepthMaterial : sectionDepthMaterial) : undefined;
       mesh.castShadow = !wire && opacity > 0.5;
     }
   }
@@ -669,7 +705,7 @@ function tick() {
   }
   if (updateFloor()) moving = true;
   // 与发动机相同的“外壳打开”节奏：从完整实体平滑推进到真实剖面。
-  const sectionGoal = (state.mode === 'xray' && state.xray === 'section') || (isLighter() && state.mode === 'motion') ? 1 : 0;
+  const sectionGoal = (state.mode === 'xray' && state.xray === 'section') || ((isLighter() || state.engineModel) && state.mode === 'motion') ? 1 : 0;
   const sectionDelta = sectionGoal - state.sectionT;
   if (Math.abs(sectionDelta) > 1e-4) {
     state.sectionT += sectionDelta * Math.min(1, dt * 3.2);
@@ -692,6 +728,15 @@ function tick() {
       active: state.mode === 'motion',
       sectionAmount: state.sectionT,
       ...(state.lighterFrame || { sparks: 0, valve: 0, flame: 0 }),
+    });
+  }
+  if (state.engineEffects && (moving || dirty)) {
+    state.engineEffects.update({
+      time: state.motionTime,
+      active: state.mode === 'motion' && state.motionPlaying,
+      visible: state.mode === 'motion' && !state.solo,
+      clip: engineSectionPlanes,
+      focused: Boolean(state.selected || state.entries.some((e) => e.hidden)),
     });
   }
   if (camAnim) {
@@ -728,8 +773,9 @@ function pick(ev) {
   }
   for (const h of raycaster.intersectObjects(objs, false)) {
     const e = h.object.userData.entry;
-    const cutaway = (state.mode === 'xray' && state.xray === 'section') || (isLighter() && state.mode === 'motion');
-    if (cutaway && e.sectionable && sectionPlane.distanceToPoint(h.point) < 0) continue;
+    const cutaway = (state.mode === 'xray' && state.xray === 'section') || ((isLighter() || state.engineModel) && state.mode === 'motion');
+    const clipped = sectionPlane.distanceToPoint(h.point) < 0 && (!state.engineModel || sectionY.distanceToPoint(h.point) < 0);
+    if (cutaway && e.sectionable && clipped) continue;
     return e;
   }
   return null;
@@ -1146,9 +1192,9 @@ function loadItem(item) {
   $('photoBtn').disabled = !item.photo;
   $('photoBtn').title = item.photo ? '查看上传的照片' : '示例模型没有实机照片';
   document.title = `${o.name} · 拆解 LAB`;
-  // 打火机默认采用“实体剖切 + 点火循环”，让结构与工作过程同时可见。
-  if (item.id === 'sample-lighter') state.xray = 'section';
-  const nextMode = item.id === 'sample-lighter'
+  // 打火机与发动机默认同时展示剖切结构和工作过程，六种模式仍可自由切换。
+  if (item.id === 'sample-lighter' || state.engineModel) state.xray = 'section';
+  const nextMode = item.id === 'sample-lighter' || state.engineModel
     ? 'motion'
     : (state.mode === 'step' || (state.mode === 'motion' && !hasMotion()) ? 'overview' : state.mode);
   setMode(nextMode);

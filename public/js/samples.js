@@ -261,6 +261,7 @@ export const COMPRESSOR = {
 
 import { RC04 } from './sample-rc04.js';
 import { WT01 } from './sample-wt01.js';
+import { ENGINE } from './sample-engine.js';
 
 export const SAMPLES = [
   { id: 'sample-lighter', code: 'LT-01', data: LIGHTER, sample: true },
@@ -268,4 +269,5 @@ export const SAMPLES = [
   { id: 'sample-compressor', code: 'AC-03', data: COMPRESSOR, sample: true },
   { id: 'sample-rc04', code: 'RC-04', data: RC04, sample: true },
   { id: 'sample-wt01', code: 'WT-01', data: WT01, sample: true },
+  { id: 'sample-engine', code: 'TF-06', data: ENGINE, sample: true },
 ];

@@ -1,7 +1,7 @@
 // 清洗 AI 返回的数据：补默认值、去掉非法数字、保证 id 唯一、展开阵列、规范运动数据
 const BASIC_SHAPES = ['box', 'roundedBox', 'cylinder', 'tube', 'cone', 'sphere', 'torus', 'capsule', 'spring', 'gear', 'lathe', 'extrude'];
 const TEMPLATE_SHAPES = ['bolt', 'nut', 'bearing', 'valvePlate', 'flange', 'pulley', 'finnedCylinder', 'crankshaft', 'piston', 'conrod', 'threadedRod', 'blade'];
-const SHAPES = new Set([...BASIC_SHAPES, ...TEMPLATE_SHAPES]);
+const SHAPES = new Set([...BASIC_SHAPES, ...TEMPLATE_SHAPES, 'enginePart']);
 const MATS = new Set(['steel', 'stainless', 'aluminum', 'brass', 'copper', 'chrome', 'iron', 'paint', 'plastic', 'transparent_plastic', 'rubber', 'glass', 'liquid', 'fiber', 'ceramic', 'wood', 'pcb', 'magnet', 'fabric', 'paper', 'foam']);
 const MOTIONS = new Set(['rotate', 'oscillate', 'swing', 'slider', 'conrod']);
 
