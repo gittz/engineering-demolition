@@ -42,6 +42,19 @@ function build() {
       P('lathe', { points: [[1195, TB], [1235, TB], [1150, TT], [1110, TT], [1195, TB]], sharp: true }),
       P('tube', { outerRadius: 1230, innerRadius: 1000, height: 80 }, [0, TT - 40, 0]),
       P('tube', { outerRadius: 1250, innerRadius: 1130, height: 60 }, [0, TB + 1400, 0]),
+      P('tube', { outerRadius: 1190, innerRadius: 1120, height: 50 }, [0, TT - 700, 0]),
+      P('tube', { outerRadius: 1125, innerRadius: 1010, height: 40 }, [0, TT - 260, 0]),
+      P('nut', { diameter: 36, size: 56, thickness: 36 }, [0, TT + 62, 0], [0, 0, 0], ring(20, 1035, 'y', 9)),
+    ],
+  });
+  add({
+    id: 'tower_cable', name: '塔内电缆', name_en: 'Tower drop cable', group: '塔筒', material: 'rubber', color: '#1f2428',
+    function: '把发电机和机舱柜的电力与信号电缆从塔顶引到底部变流器/塔底柜。', description: '垂挂的电力电缆束，每隔一段用电缆夹固定在塔壁上，留出余长以缓冲机舱旋转。',
+    position: [0, 0, 0], explode: [0, -1600, -500],
+    shapes: [
+      P('spring', { radius: 85, wireRadius: 13, turns: 2.2, height: 2500 }, [950, TB + 1500, 0]),
+      P('roundedBox', { width: 210, height: 40, depth: 70, radius: 10 }, [950, TB + 420, 0]),
+      P('roundedBox', { width: 210, height: 40, depth: 70, radius: 10 }, [950, TB + 2650, 0]),
     ],
   });
   add({
@@ -63,6 +76,8 @@ function build() {
     shapes: [
       P('gear', { radius: 1600, teeth: 120, toothDepth: 60, thickness: 200, innerRadius: 1300 }, [0, TT + 100, 0]),
       P('tube', { outerRadius: 1320, innerRadius: 1100, height: 200 }, [0, TT + 100, 0]),
+      P('torus', { radius: 1340, tube: 26 }, [0, TT + 15, 0]),
+      P('torus', { radius: 1340, tube: 26 }, [0, TT + 185, 0]),
     ],
   });
   add({
@@ -74,6 +89,15 @@ function build() {
       P('cylinder', { radius: 230, height: 600 }, [0, TT + 520, 0], [0, 0, 0], ring(4, 1780, 'y', 45)),
       P('cylinder', { radius: 180, height: 520 }, [0, TT + 1080, 0], [0, 0, 0], ring(4, 1780, 'y', 45)),
       P('cylinder', { radius: 200, height: 40 }, [0, TT + 1360, 0], [0, 0, 0], ring(4, 1780, 'y', 45)),
+    ],
+  });
+  add({
+    id: 'yaw_brakes', name: '偏航制动钳（4 套）', name_en: 'Yaw brakes', group: '偏航系统', material: 'paint', color: '#b0473f',
+    function: '液压钳夹紧偏航轴承外圈端面，对风停机时锁住机舱，防止风轮自行偏转。', description: '浮动式液压制动钳，沿齿圈 90° 均布，与高速轴制动器共用液压站。',
+    position: [0, 0, 0], explode: [0, -350, 0],
+    shapes: [
+      P('roundedBox', { width: 300, height: 240, depth: 260, radius: 24 }, [0, TT + 100, 0], [0, 0, 0], ring(4, 1450, 'y', 45, true)),
+      P('cylinder', { radius: 60, height: 70 }, [0, TT + 265, 0], [0, 0, 0], ring(4, 1450, 'y', 45, true)),
     ],
   });
 
@@ -102,9 +126,11 @@ function build() {
     shapes: [
       P('roundedBox', { width: 3600, height: 3200, depth: 7600, radius: 520 }, [0, 12850, -1500]),
       P('roundedBox', { width: 1300, height: 60, depth: 1100, radius: 20 }, [0, 14470, -600]),
-      P('box', { width: 1400, height: 50, depth: 800 }, [0, 13100, -5310]),
-      P('box', { width: 1400, height: 50, depth: 800 }, [0, 13300, -5310]),
-      P('box', { width: 1400, height: 50, depth: 800 }, [0, 13500, -5310]),
+      P('box', { width: 1400, height: 50, depth: 800 }, [0, 13100, -5310], [28, 0, 0]),
+      P('box', { width: 1400, height: 50, depth: 800 }, [0, 13300, -5310], [28, 0, 0]),
+      P('box', { width: 1400, height: 50, depth: 800 }, [0, 13500, -5310], [28, 0, 0]),
+      P('roundedBox', { width: 40, height: 1500, depth: 900, radius: 30 }, [1815, 12900, -2200]),
+      P('cylinder', { radius: 26, height: 150 }, [1855, 13150, -1900]),
     ],
   });
 
@@ -120,6 +146,15 @@ function build() {
         P('tube', { outerRadius: 540, innerRadius: 400, height: 80 }, at(a, BLADE_R0 + 40), [0, 0, a]),
       ],
     });
+  });
+  add({
+    id: 'blade_bolts', name: '叶根螺栓组（3×10）', name_en: 'Blade root bolt sets', group: '叶片', material: 'steel', color: C.steel,
+    function: '把叶片根部法兰压紧到变桨轴承内圈，传递叶片的全部载荷。', description: '每支叶片一圈高强螺柱配六角螺母（示意 10 颗，实机约 120 颗），靠预紧力夹紧，过载时断螺栓保护叶尖。',
+    position: [0, SY, HZ], explode: [0, 0, 2600], motion: spin(ROTOR),
+    shapes: BLADES.flatMap((a) => [
+      P('cylinder', { radius: 17, height: 160 }, at(a, 1315), [0, 0, a], ring(10, 455, 'z', 18)),
+      P('nut', { diameter: 36, size: 55, thickness: 30 }, at(a, 1400), [0, 0, a], ring(10, 455, 'z', 18)),
+    ]),
   });
 
   // ===== 轮毂与变桨 =====
@@ -137,6 +172,7 @@ function build() {
       P('sphere', { radius: 1180 }),
       ...BLADES.map((a) => P('cylinder', { radius: 640, height: 320 }, at(a, 1060), [0, 0, a])),
       P('cylinder', { radius: 920, height: 220 }, [0, 0, -1000], AZ),
+      P('nut', { diameter: 42, size: 64, thickness: 42 }, [0, 0, -1070], AZ, ring(16, 760, 'z', 11.25)),
     ],
   });
   add({
@@ -146,6 +182,7 @@ function build() {
     shapes: BLADES.flatMap((a) => [
       P('tube', { outerRadius: 660, innerRadius: 480, height: 160 }, at(a, 1300), [0, 0, a]),
       P('gear', { radius: 470, teeth: 70, toothDepth: 30, thickness: 120, innerRadius: 380 }, at(a, 1180), [0, 0, a]),
+      P('nut', { diameter: 30, size: 46, thickness: 30 }, at(a, 1120), [0, 0, a], ring(14, 430, 'z', 13)),
     ]),
   });
   add({
@@ -198,6 +235,8 @@ function build() {
       P('cylinder', { radius: 200, height: 560 }, [-1250, -505, -1000]),
       P('cylinder', { radius: 200, height: 560 }, [1250, -505, -1000]),
       P('cylinder', { radius: 260, height: 120 }, [0, 850, -2860], AZ),
+      P('cylinder', { radius: 55, height: 26 }, [965, 700, -2250], [0, 0, 90]),
+      P('cylinder', { radius: 45, height: 140 }, [520, 1520, -2250]),
     ],
   });
   add({
@@ -275,8 +314,11 @@ function build() {
     position: [0, HSY, -4300], explode: [0, 0, -1800], motion: spin(HSS),
     shapes: [
       P('cylinder', { radius: 600, height: 1350 }, [0, 0, 0], AZ),
-      P('cylinder', { radius: 110, height: 1950 }, [0, 0, 120], AZ),
+      P('cylinder', { radius: 110, height: 2250 }, [0, 0, 65], AZ),
       P('tube', { outerRadius: 620, innerRadius: 560, height: 60 }, [0, 0, 300], AZ, { count: 3, spacing: [0, 0, -300] }),
+      P('torus', { radius: 150, tube: 24 }, [0, 0, -880], AZ),
+      P('torus', { radius: 150, tube: 24 }, [0, 0, -950], AZ),
+      P('torus', { radius: 150, tube: 24 }, [0, 0, -1020], AZ),
     ],
   });
 
@@ -345,6 +387,16 @@ function build() {
       P('cone', { radius: 40, height: 120 }, [0, 80, 340], AZ),
     ],
   });
+  add({
+    id: 'beacon', name: '航空障碍灯', name_en: 'Aviation beacon', group: '测风系统', material: 'paint', color: '#c03b34',
+    function: '夜间闪烁红光，向低空飞行器标示机组位置，属于航空安全强制配置。', description: '底座 + 立杆 + 红色灯罩，由主控控制闪光周期。',
+    position: [0, 0, 0], explode: [0, 8000, -600],
+    shapes: [
+      P('cylinder', { radius: 90, height: 70 }, [0, 14485, -4600]),
+      P('cylinder', { radius: 28, height: 260 }, [0, 14650, -4600]),
+      P('sphere', { radius: 72 }, [0, 14800, -4600]),
+    ],
+  });
 
   // 拆卸顺序：先拆机舱罩、测风和散热器，再拆风轮（导流罩、叶片、轮毂），然后由后往前拆传动链，最后是底座、偏航和塔筒
   const DIS = ['测风系统', '机舱罩', '冷却与控制', '叶片', '轮毂与变桨', '发电机', '制动与联轴器', '齿轮箱', '主轴与主轴承', '机舱底座', '偏航系统', '塔筒'];
@@ -357,12 +409,12 @@ export const WT01 = {
     name: '风力发电机组',
     name_en: 'Wind Turbine Generator',
     category: '风电行业 · 双馈式风力发电机组',
-    summary: '水平轴三叶片上风向风力发电机组：风轮带动主轴，经一级行星 + 一级平行轴齿轮箱增速后驱动双馈发电机；机舱可通过偏航系统整体转向对风，叶片可独立变桨调节功率。',
+    summary: '水平轴三叶片上风向风力发电机组：风轮带动主轴，经一级行星 + 一级平行轴齿轮箱增速后驱动双馈发电机；机舱可通过偏航系统整体转向对风，叶片可独立变桨调节功率。机舱特写共 34 个零件，含叶根螺栓组、偏航制动钳、塔内电缆与航空障碍灯。',
     principle: '风吹过叶片翼型产生升力，使风轮以约 10 rpm 低速旋转。主轴把转矩传给齿轮箱，行星级和平行级共增速约 13 倍后带动发电机高速旋转发电。主控根据风速仪和风向标的信号控制偏航驱动对风，并通过变桨系统改变叶片角度，在额定风速以上限制功率、大风时顺桨停机。',
     overall_size_mm: [7200, 8800, 11000],
     view: [1, 0.5, 0.42],
     confidence: 0.85,
-    assumptions: ['机舱特写：叶片只画叶根段、塔筒只画塔顶段，便于看清机舱内部', '齿轮箱简化为一级行星 + 一级平行轴', '电缆、爬梯、平台和润滑管路未建模'],
+    assumptions: ['机舱特写：叶片只画叶根段、塔筒只画塔顶段，便于看清机舱内部', '齿轮箱简化为一级行星 + 一级平行轴', '塔内电缆简化为一束绕缆，润滑油管路未建模'],
   },
   parts: build(),
 };

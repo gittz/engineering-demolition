@@ -154,6 +154,16 @@ export function createLighterEffects(parent) {
   root.add(flameLight);
 
   const sprite = glowTexture();
+
+  // 喷嘴热辉光：点燃时在防风罩出口上方叠一层柔和光晕，提升火场氛围。
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: sprite, color: 0xffa25e, transparent: true, opacity: 0,
+    depthWrite: false, blending: THREE.AdditiveBlending,
+  }));
+  glow.position.set(0, 34.2, -3.5);
+  glow.scale.set(5.5, 6.5, 1);
+  glow.renderOrder = 11;
+  root.add(glow);
   const sparkPositions = new Float32Array(MAX_SPARKS * 3);
   const sparkColors = new Float32Array(MAX_SPARKS * 3);
   sparkPositions.fill(OFF);
@@ -248,6 +258,8 @@ export function createLighterEffects(parent) {
     outerFlame.scale.set(pulse, 0.92 + fire * 0.08, pulse);
     innerFlame.scale.set(0.96 + pulse * 0.04, 0.96 + fire * 0.04, 0.96 + pulse * 0.04);
     flameLight.intensity = fire * (2.2 + Math.sin(time * 21) * 0.32);
+    glow.material.opacity = fire * 0.42 * (0.9 + 0.1 * Math.sin(time * 17.3));
+    glow.visible = fire > 0.01;
 
     updateGas(time, active ? valve : 0);
     updateSparks(active ? dt : 0, active ? sparkStrength : 0);
